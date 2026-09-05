@@ -1,0 +1,41 @@
+name: Bug report
+description: Report an alpha bug using synthetic data only.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "Early alpha: please use invented transaction details. Never upload SMS backups, OTPs, full account numbers, UPI IDs, database files or signing keys. Report vulnerabilities privately through Security."
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      placeholder: 0.1.0-alpha.1
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device model and Android version
+      placeholder: Pixel 9a emulator, Android 16
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include relevant permission settings and a synthetic example if needed.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed personal data and used only synthetic transaction examples.
+          required: true
