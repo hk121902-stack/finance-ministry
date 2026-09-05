@@ -53,7 +53,7 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
-      - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       - name: Decode persistent alpha signing key
         env:
           ALPHA_KEYSTORE_BASE64: ${{ secrets.ALPHA_KEYSTORE_BASE64 }}
