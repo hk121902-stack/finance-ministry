@@ -8,6 +8,19 @@ import org.junit.Test
 
 class ManualEntryUiTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+
+    @Test fun resume_refreshes_capture_status_without_disabling_manual_entry() {
+        val repository = (rule.activity.application as FinanceMinistryApp).container.repository
+        val previous = repository.preferences.getBoolean("sms_disclosure", false)
+        try {
+            repository.preferences.edit().putBoolean("sms_disclosure", false).commit()
+            rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+            rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+            rule.onNodeWithText("Enable SMS capture").assertExists()
+            rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
+        } finally { repository.preferences.edit().putBoolean("sms_disclosure", previous).commit() }
+    }
+
     @Test fun add_manual_transaction_through_real_form() {
         val repository = (rule.activity.application as FinanceMinistryApp).container.repository
         val before = runBlocking { repository.snapshot().rows.map { it.id }.toSet() }

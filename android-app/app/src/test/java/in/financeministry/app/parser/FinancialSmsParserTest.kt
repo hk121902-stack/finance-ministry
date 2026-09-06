@@ -99,6 +99,64 @@ class FinancialSmsParserTest {
         assertEquals(ParseDecision.NeedsReview, parse("Your refund of INR 250 is received").decision)
     }
 
+    @Test fun balance_abbreviations_are_not_transaction_amounts() {
+        listOf("AvlBal", "Avl Bal", "Avail. Bal", "Available balance").forEach { label ->
+            val result = parse("Your account is credited with INR 7.00 by UPI; $label: Rs1234.56 - TEST BANK")
+            assertEquals(label, ParseDecision.Record, result.decision)
+            assertEquals(label, 700L, result.amountMinor)
+            assertEquals(Direction.Credit, result.direction)
+            assertEquals(TransactionStatus.Successful, result.status)
+            assertEquals(Channel.UPI, result.channel)
+        }
+        assertEquals(4200L, parse("Balance INR 900; INR 42 debited").amountMinor)
+    }
+
+    @Test fun structured_sent_payment_is_a_debit_with_safe_fields() {
+        val result = parse("Sent Rs.42.00\nFrom HDFC Bank A/C *0000\nTo TEST PERSON\nOn 01/01/26\nRef 000000000000\nNot You?\nSMS BLOCK UPI to 0000000000")
+        assertEquals(ParseDecision.Record, result.decision)
+        assertEquals(4200L, result.amountMinor)
+        assertEquals(Direction.Debit, result.direction)
+        assertEquals(TransactionStatus.Successful, result.status)
+        assertEquals("••••0000", result.maskedAccountHint)
+        assertEquals("TEST PERSON", result.counterpartyLabel)
+        // A security footer alone does not establish the payment channel.
+        assertEquals(Channel.Unknown, result.channel)
+    }
+
+    @Test fun sent_word_alone_is_not_payment_evidence() {
+        listOf("Sent Rs.42 voucher to your email", "We sent Rs.42 offer details", "Sent Rs.42.00\nTo TEST PERSON").forEach {
+            assertEquals(it, ParseDecision.Reject, parse(it).decision)
+        }
+    }
+
+    @Test fun ambiguous_amount_preserves_unambiguous_fields() {
+        val result = parse("INR 42 or INR 43 credited via UPI")
+        assertEquals(ParseDecision.NeedsReview, result.decision)
+        assertNull(result.amountMinor)
+        assertEquals(Direction.Credit, result.direction)
+        assertEquals(TransactionStatus.Successful, result.status)
+        assertEquals(Channel.UPI, result.channel)
+    }
+
+    @Test fun masked_hints_do_not_export_full_or_conflicting_accounts() {
+        assertEquals("••••0000", parse("INR 42 debited from account XX0000").maskedAccountHint)
+        assertNull(parse("INR 42 debited from account 123456789012").maskedAccountHint)
+        assertNull(parse("INR 42 transferred between your own accounts XX0000 and card XX9999").maskedAccountHint)
+        assertNull(parse("INR 42 debited from account XX00001").maskedAccountHint)
+    }
+
+    @Test fun balance_only_and_security_messages_remain_rejected() {
+        listOf("AvlBal: Rs1234.56", "Avail. Bal INR 42", "Not You? SMS BLOCK UPI to 0000000000").forEach {
+            assertEquals(it, ParseDecision.Reject, parse(it).decision)
+        }
+        assertEquals(ParseDecision.Reject, parse("OTP 123456\nSent Rs.42.00\nFrom TEST Bank A/C *0000\nTo TEST PERSON").decision)
+        assertEquals(ParseDecision.Reject, parse("INR 42 will be credited tomorrow; AvlBal Rs1234").decision)
+    }
+
+    @Test fun verification_guard_checks_the_entire_message() {
+        assertEquals(ParseDecision.Reject, parse("INR 42 debited\nNot You?\nOTP 123456 for verification").decision)
+    }
+
     private data class Case(
         val name: String,
         val body: String,

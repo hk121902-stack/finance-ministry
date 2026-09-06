@@ -26,7 +26,8 @@ fun money(minor: Long?): String = minor?.let { "₹${BigDecimal.valueOf(it, 2).t
 fun transactionTime(millis: Long): String = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(millis))
 
 @Composable
-fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?, consumeRequest: () -> Unit) {
+fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?, refreshGeneration: Int = 0, consumeRequest: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val revision by repository.revision.collectAsState()
     var snapshot by remember { mutableStateOf<LedgerSnapshot?>(null) }
@@ -40,9 +41,19 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var busy by remember { mutableStateOf(false) }
     var notifications by remember { mutableStateOf(repository.preferences.getBoolean("notifications", true)) }
     var captureEnabled by remember { mutableStateOf(repository.captureAllowed()) }
+    var notificationAvailable by remember { mutableStateOf(`in`.financeministry.app.sms.TransactionNotifications.available(context)) }
     var filter by rememberSaveable { mutableStateOf("All") }
+    var offset by rememberSaveable { mutableIntStateOf(0) }
+    var loading by remember { mutableStateOf(false) }
     val smsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { captureEnabled = repository.captureAllowed() }
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        notificationAvailable = `in`.financeministry.app.sms.TransactionNotifications.available(context)
+    }
+    LaunchedEffect(refreshGeneration) {
+        captureEnabled = repository.captureAllowed()
+        notifications = repository.preferences.getBoolean("notifications", true)
+        notificationAvailable = `in`.financeministry.app.sms.TransactionNotifications.available(context)
+    }
     BackHandler(enabled = selected != null && !form) { if (!busy) { selected = null; selectedId = null } }
     LaunchedEffect(selectedId) {
         if (selectedId != null && selected?.id != selectedId) {
@@ -50,12 +61,21 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
             catch (_: Exception) { error = "Cannot open this transaction."; selectedId = null; form = false }
         }
     }
-    LaunchedEffect(revision) {
-        try { snapshot = repository.snapshot() } catch (_: Exception) { error = "Cannot open encrypted storage. Existing data was preserved. Erase all only if you intend to delete it." }
+    LaunchedEffect(revision, offset, filter, refreshGeneration) {
+        loading = true
+        try {
+            val result = repository.snapshot(offset, filter)
+            snapshot = result
+            if (result.rows.isEmpty() && offset > 0) offset = maxOf(0, offset - 100)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (_: Exception) { error = "Cannot open encrypted storage. Existing data was preserved. Erase all only if you intend to delete it." }
+        finally { loading = false }
     }
     LaunchedEffect(request) {
         if (request != null) {
-            try { selected = repository.get(request.first); if (selected == null) error = "This transaction no longer exists." else { selectedId = selected!!.id; form = request.second } }
+            selected = null; selectedId = null; form = false
+            try { selected = repository.get(request.first); if (selected == null) error = "This transaction no longer exists." else { selectedId = selected!!.id; form = request.second; error = null } }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (_: Exception) { error = "Cannot open this transaction. Data was preserved." }
             consumeRequest()
         }
@@ -67,13 +87,17 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (selectedId != null && selected == null) { Text("Loading transaction…") }
             else if (form) {
-                TransactionForm(repository, selected, onDone = { form = false; selected = null; selectedId = null; error = null })
+                TransactionForm(repository, selected, onDone = { form = false; selected = null; selectedId = null; offset = 0; error = null })
             } else if (selected != null) {
                 val row = selected!!
                 Text(money(row.amountMinor), style = MaterialTheme.typography.headlineSmall)
                 Text("${row.direction} · ${row.status} · ${row.reviewState}")
                 Text("${row.transactionType} · ${row.channel} · ${row.sourceType}")
                 Text(transactionTime(row.effectiveTimestamp))
+                row.linkedOriginalId?.let { originalId ->
+                    TextButton(onClick = { selected = null; selectedId = originalId }) { Text("View linked original transaction") }
+                    Text("Linked by matching reference, account, channel and full amount.", style = MaterialTheme.typography.bodySmall)
+                }
                 row.counterpartyLabel?.let { Text(it) }; row.maskedAccountHint?.let { Text(it) }; row.userNotes?.let { Text(it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { form = true }) { Text("Edit / confirm") }
@@ -83,12 +107,14 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
             } else {
                 Button(onClick = { selected = null; selectedId = null; form = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("+ Add transaction") }
                 snapshot?.let {
+                    Text("Today: spent ₹${BigDecimal(it.dailyDebit, 2).toPlainString()} · received ₹${BigDecimal(it.dailyCredit, 2).toPlainString()}")
                     Text("This month: spent ₹${BigDecimal(it.debit, 2).toPlainString()} · received ₹${BigDecimal(it.credit, 2).toPlainString()}")
                     Text("Excludes transfers, needs-review, failed, reversed and pending records.", style = MaterialTheme.typography.bodySmall)
                 }
                 OutlinedButton(onClick = {
                     if (captureEnabled) { repository.preferences.edit().putBoolean("sms_disclosure", false).apply(); captureEnabled = false } else disclosure = true
                 }, enabled = !busy) { Text(if (captureEnabled) "Pause SMS capture" else "Enable SMS capture") }
+                Text(if (captureEnabled) "SMS capture active" else "SMS capture paused or permission unavailable · Manual entry works", style = MaterialTheme.typography.bodySmall)
                 Row {
                     Text("Recording notifications", Modifier.weight(1f).padding(top = 12.dp))
                     Switch(checked = notifications, onCheckedChange = {
@@ -96,17 +122,21 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         if (it && Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                     })
                 }
-                if (notifications && Build.VERSION.SDK_INT >= 33) TextButton(onClick = { notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("Allow Android notifications") }
+                if (notifications && !notificationAvailable) {
+                    Text("Android notifications are blocked. SMS capture can still record transactions.", style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)) }) { Text("Open notification settings") }
+                    if (Build.VERSION.SDK_INT >= 33) TextButton(onClick = { notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("Allow Android notifications") }
+                }
                 if (repository.preferences.getBoolean("capture_error", false)) Text("A message could not be recorded. Add it manually if needed.", color = MaterialTheme.colorScheme.error)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("All", "Review", "Manual", "Edited").forEach { label ->
-                        FilterChip(selected = filter == label, onClick = { filter = label }, label = { Text(label) })
+                        FilterChip(selected = filter == label, onClick = { filter = label; offset = 0; snapshot = null }, label = { Text(label) })
                     }
                 }
-                val rows = snapshot?.rows.orEmpty().filter { when (filter) {
-                    "Review" -> it.reviewState == "NeedsReview"; "Manual" -> it.sourceType == "Manual"; "Edited" -> it.isUserCorrected; else -> true
-                } }
-                if (rows.isEmpty()) Text("No transactions yet. Add one, or enable capture for new messages.")
+                val rows = snapshot?.rows.orEmpty()
+                if (loading) Text("Loading transactions…")
+                else if (rows.isEmpty()) Text("No matching transactions. Add one, enable capture, or choose another filter.")
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(rows, key = { it.id }) { row ->
                         Card(Modifier.fillMaxWidth().clickable { selected = row; selectedId = row.id }) {
@@ -118,7 +148,12 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         }
                     }
                 }
-                Text("Latest 500 records · No historical SMS import", style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { offset = maxOf(0, offset - 100); snapshot = null }, enabled = !loading && offset > 0) { Text("Newer") }
+                    Text("Page ${offset / 100 + 1}", Modifier.padding(top = 12.dp))
+                    TextButton(onClick = { offset += 100; snapshot = null }, enabled = !loading && snapshot?.hasOlder == true && offset <= Int.MAX_VALUE - 201) { Text("Older") }
+                }
+                Text("All saved history · No historical SMS import", style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = { eraseDialog = true }, enabled = !busy) { Text("Erase all local data") }
             }
         }

@@ -16,7 +16,9 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 
-data class LedgerSnapshot(val rows: List<TransactionEntity>, val debit: BigInteger, val credit: BigInteger)
+data class LedgerSnapshot(val rows: List<TransactionEntity>, val debit: BigInteger, val credit: BigInteger,
+    val dailyDebit: BigInteger = BigInteger.ZERO, val dailyCredit: BigInteger = BigInteger.ZERO,
+    val hasOlder: Boolean = false)
 
 /** All mutation, capture and erasure share one gate. No raw source is stored. */
 class TransactionRepository(private val context: Context, private val namespace: String = "finance") {
@@ -31,15 +33,22 @@ class TransactionRepository(private val context: Context, private val namespace:
         secrets.databasePassphrase(context.getDatabasePath(dbName).exists()), dbName).also { database = it }
     private suspend fun <T> locked(block: () -> T): T = withContext(Dispatchers.IO) { mutex.withLock { block() } }
 
-    suspend fun snapshot(): LedgerSnapshot = locked {
+    suspend fun snapshot(offset: Int = 0, filter: String = "All", today: LocalDate = LocalDate.now()): LedgerSnapshot = locked {
+        require(offset >= 0 && offset <= Int.MAX_VALUE - 101)
+        require(filter in listOf("All", "Review", "Manual", "Edited"))
         if (database == null && !context.getDatabasePath(dbName).exists()) return@locked LedgerSnapshot(emptyList(), BigInteger.ZERO, BigInteger.ZERO)
         val zone = ZoneId.systemDefault()
-        val month = LocalDate.now(zone).withDayOfMonth(1)
+        val month = today.withDayOfMonth(1)
         val rows = db().transactions().between(month.atStartOfDay(zone).toInstant().toEpochMilli(), month.plusMonths(1).atStartOfDay(zone).toInstant().toEpochMilli())
-        fun sum(direction: Direction) = rows.filter { it.direction == direction.name && it.status == TransactionStatus.Successful.name &&
+        val dayStart = today.atStartOfDay(zone).toInstant().toEpochMilli()
+        val dayEnd = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val reversedOriginals = db().transactions().reversedOriginals().toSet()
+        fun sum(direction: Direction, daily: Boolean = false) = rows.filter { it.id !in reversedOriginals && (!daily || it.effectiveTimestamp in dayStart until dayEnd) && it.direction == direction.name && it.status == TransactionStatus.Successful.name &&
             it.reviewState != ReviewState.NeedsReview.name && it.transactionType != TransactionType.SelfTransfer.name }
             .fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf(row.amountMinor ?: 0) }
-        LedgerSnapshot(db().transactions().latest(), sum(Direction.Debit), sum(Direction.Credit))
+        val page = db().transactions().page(filter, 101, offset)
+        LedgerSnapshot(page.take(100), sum(Direction.Debit), sum(Direction.Credit),
+            sum(Direction.Debit, true), sum(Direction.Credit, true), page.size > 100)
     }
 
     suspend fun get(id: String): TransactionEntity? = locked {
@@ -54,13 +63,38 @@ class TransactionRepository(private val context: Context, private val namespace:
         val parsed = parser.parse(sms)
         if (parsed.decision == ParseDecision.Reject) return@locked false
         val now = System.currentTimeMillis()
-        val row = TransactionEntity(id = UUID.randomUUID().toString(), sourceFingerprint = secrets.hmacSource(sms.sender, sms.receivedAtMillis, sms.body),
+        val referenceHash = `in`.financeministry.app.parser.TransactionReference.extract(sms.body)?.let {
+            secrets.hmacSource("transaction-reference-v1:${sms.sender.lowercase(java.util.Locale.ROOT)}", 0, it)
+        }
+        var row = TransactionEntity(id = UUID.randomUUID().toString(), sourceFingerprint = secrets.hmacSource(sms.sender, sms.receivedAtMillis, sms.body),
             sourceType = SourceType.SMS.name, sourceTimestamp = sms.receivedAtMillis, effectiveTimestamp = sms.receivedAtMillis,
             amountMinor = parsed.amountMinor, currency = parsed.currency, direction = parsed.direction.name, status = parsed.status.name,
             channel = parsed.channel.name, transactionType = parsed.transactionType.name, maskedAccountHint = parsed.maskedAccountHint,
+            counterpartyLabel = parsed.counterpartyLabel,
             confidence = parsed.confidence, reviewState = if (parsed.decision == ParseDecision.Record) ReviewState.AutoRecorded.name else ReviewState.NeedsReview.name,
-            parserVersion = parsed.parserVersion, createdAt = now, updatedAt = now)
-        if (db().transactions().insert(row) == -1L) return@locked false
+            parserVersion = parsed.parserVersion, createdAt = now, updatedAt = now, referenceHash = referenceHash)
+        val dao = db().transactions()
+        var inserted = false
+        db().runInTransaction {
+            val adjustment = row.transactionType in listOf("Refund", "Reversal")
+            if (adjustment) {
+                val originals = referenceHash?.let(dao::byReference).orEmpty().filter {
+                    it.sourceType == "SMS" && !it.isUserCorrected && it.status == "Successful" && it.direction == "Debit" &&
+                        it.transactionType !in listOf("Refund", "Reversal", "SelfTransfer") && it.reviewState == "AutoRecorded" &&
+                        it.amountMinor == row.amountMinor && it.currency == row.currency &&
+                        it.maskedAccountHint != null && it.maskedAccountHint == row.maskedAccountHint &&
+                        it.channel != "Unknown" && it.channel == row.channel && it.sourceTimestamp <= row.sourceTimestamp &&
+                        dao.linkedTo(it.id).isEmpty()
+                }
+                val validAdjustment = parsed.decision == ParseDecision.Record &&
+                    ((row.transactionType == "Refund" && row.direction == "Credit" && row.status == "Successful") ||
+                        (row.transactionType == "Reversal" && row.status == "Reversed"))
+                row = if (validAdjustment && originals.size == 1) row.copy(linkedOriginalId = originals.single().id)
+                    else row.copy(reviewState = "NeedsReview")
+            }
+            inserted = dao.insert(row) != -1L
+        }
+        if (!inserted) return@locked false
         revision.value++
         // Insertion is committed. Notification failure must never roll it back; erase cannot race posting.
         try { onSaved(row) } catch (_: Exception) { /* OS notification availability is independent of capture. */ }
@@ -81,6 +115,8 @@ class TransactionRepository(private val context: Context, private val namespace:
             isUserCorrected = old != null, createdAt = old?.createdAt ?: now, updatedAt = now)
         db().runInTransaction {
             if (old == null) dao.insert(row) else {
+                // Corrections override automation; discard any links affected by the edit.
+                dao.unlinkFrom(old.id)
                 fun fields(r: TransactionEntity) = mapOf("amountMinor" to r.amountMinor?.toString(), "direction" to r.direction,
                     "status" to r.status, "channel" to r.channel, "transactionType" to r.transactionType, "effectiveTimestamp" to r.effectiveTimestamp.toString(),
                     "counterpartyLabel" to r.counterpartyLabel, "maskedAccountHint" to r.maskedAccountHint, "userNotes" to r.userNotes, "reviewState" to r.reviewState)
@@ -95,7 +131,7 @@ class TransactionRepository(private val context: Context, private val namespace:
     }
 
     suspend fun delete(id: String) = locked {
-        db().transactions().delete(id)
+        db().runInTransaction { db().transactions().unlinkFrom(id); db().transactions().delete(id) }
         context.getSystemService(NotificationManager::class.java).cancel(id, 1)
         revision.value++
     }

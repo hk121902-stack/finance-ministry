@@ -13,6 +13,11 @@ import java.math.BigDecimal
 
 object TransactionNotifications {
     const val CHANNEL = "recorded_transactions"
+    fun available(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false
+        val manager = context.getSystemService(NotificationManager::class.java)
+        return manager.areNotificationsEnabled() && manager.getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
+    }
     fun post(context: Context, row: TransactionEntity, enabled: Boolean) {
         if (!enabled || (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)) return
         val manager = context.getSystemService(NotificationManager::class.java)

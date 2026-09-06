@@ -11,9 +11,22 @@ import java.math.BigInteger
 
 class RuleBasedFinancialSmsParser {
     fun parse(input: IncomingSms): ParseAssessment {
-        val text = ParserRules.normalized(input.body)
+        val result = parseFields(input)
+        if (result.decision == ParseDecision.Reject) return result
+        val hints = Regex("""\b(?:a/c|accounts?|cards?)\s+[*xX•]+(\d{4})(?!\d)""", RegexOption.IGNORE_CASE)
+            .findAll(input.body).map { "••••${it.groupValues[1]}" }.distinct().toList()
+        val counterparty = if (ParserRules.sentPayment.containsMatchIn(ParserRules.normalized(input.body))) {
+            Regex("""(?m)^To ([A-Za-z][A-Za-z .&'-]{0,59})\r?$""").find(input.body)?.groupValues?.get(1)?.trim()
+        } else null
+        return result.copy(maskedAccountHint = hints.singleOrNull(), counterpartyLabel = counterparty)
+    }
 
-        if (ParserRules.otpOrVerification.containsMatchIn(text)) {
+    private fun parseFields(input: IncomingSms): ParseAssessment {
+        // Security instructions are not evidence of the transaction's channel or state.
+        val text = ParserRules.normalized(input.body).substringBefore("\nnot you?").trim()
+        val completed = ParserRules.completedMovement.containsMatchIn(text) || ParserRules.sentPayment.containsMatchIn(text)
+
+        if (ParserRules.otpOrVerification.containsMatchIn(ParserRules.normalized(input.body))) {
             return rejected("otp_or_verification")
         }
         if (ParserRules.negatedMovement.containsMatchIn(text)) {
@@ -22,28 +35,28 @@ class RuleBasedFinancialSmsParser {
         if (Regex("\\b(?:will be|to be|scheduled to be) (?:debited|credited)|\\b(?:debit|payment|transfer) (?:request|reminder|due)\\b").containsMatchIn(text)) {
             return rejected("promotional_or_scheduled")
         }
-        if (ParserRules.balanceOrLimit.containsMatchIn(text) && !ParserRules.completedMovement.containsMatchIn(text) &&
+        if (ParserRules.balanceOrLimit.containsMatchIn(text) && !completed &&
             !ParserRules.failed.containsMatchIn(text) && !ParserRules.reversed.containsMatchIn(text)) {
             return rejected("balance_or_limit_only")
         }
 
         if (
             (ParserRules.promotion.containsMatchIn(text) || ParserRules.futureOrReminder.containsMatchIn(text)) &&
-            !ParserRules.completedMovement.containsMatchIn(text)
+            !completed
         ) {
             return rejected("promotional_or_scheduled")
         }
         val direction = detectDirection(text)
         val status = detectStatus(text, direction)
         val decisive = direction != Direction.Unknown || status != TransactionStatus.Unknown || Regex("\\brefund(?:ed)?\\b").containsMatchIn(text)
-        if (hasMultipleCandidateAmounts(text) && ParserRules.completedMovement.containsMatchIn(text)) {
+        if (hasMultipleCandidateAmounts(text) && completed) {
             return assessment(
                 decision = ParseDecision.NeedsReview,
                 amountMinor = null,
-                direction = Direction.Unknown,
-                status = TransactionStatus.Unknown,
-                channel = Channel.Unknown,
-                transactionType = TransactionType.Unknown,
+                direction = direction,
+                status = status,
+                channel = detectChannel(text),
+                transactionType = detectTransactionType(text, detectChannel(text)),
                 confidence = 60,
                 ruleId = "ambiguous_multiple_events",
             )
@@ -84,7 +97,7 @@ class RuleBasedFinancialSmsParser {
 
     private fun detectDirection(text: String): Direction {
         if (ParserRules.ownAccounts.containsMatchIn(text)) return Direction.Transfer
-        val debit = ParserRules.debit.containsMatchIn(text)
+        val debit = ParserRules.debit.containsMatchIn(text) || ParserRules.sentPayment.containsMatchIn(text)
         val credit = ParserRules.credit.containsMatchIn(text)
         if (debit && credit) return Direction.Unknown
         if (debit) return Direction.Debit
@@ -132,7 +145,7 @@ class RuleBasedFinancialSmsParser {
 
     private fun amountCandidates(text: String): List<Long?> =
         ParserRules.amount.findAll(text)
-            .filterNot { match -> ParserRules.balanceOrLimit.containsMatchIn(text.substring(maxOf(0, match.range.first - 32), match.range.first)) }
+            .filterNot { match -> ParserRules.balanceAmountPrefix.containsMatchIn(text.substring(maxOf(0, match.range.first - 40), match.range.first)) }
             .map { match -> parseMinorUnits(match.groupValues[1]) }
             .toList()
 
@@ -185,5 +198,6 @@ class RuleBasedFinancialSmsParser {
         counterpartyLabel = null,
         confidence = confidence,
         ruleId = ruleId,
+        parserVersion = 2,
     )
 }

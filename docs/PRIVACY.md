@@ -20,7 +20,10 @@ The encrypted local database stores normalized amounts, currency, direction, sta
 channel/category, timestamps, source type, parser version/confidence, review state,
 masked account hints, user corrections and correction history. A keyed HMAC fingerprint
 detects repeat delivery without retaining its source inputs. Labels and notes you
-enter yourself are also stored locally.
+enter yourself are also stored locally. From alpha.2, the app additionally stores supported
+parsed recipient labels, device-keyed hashes of explicit transaction references, and
+local record IDs linking high-confidence refunds/reversals. Raw reference numbers are
+not stored. Editing or deleting a record removes affected automatic links.
 
 Raw SMS bodies and sender values are processed transiently and are not database
 columns. No raw-message debug logging or upload feature is included. Input filtering

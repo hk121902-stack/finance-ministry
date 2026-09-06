@@ -22,15 +22,20 @@ import androidx.navigation.compose.rememberNavController
 
 class MainActivity : ComponentActivity() {
     private val request = mutableStateOf<Pair<String, Boolean>?>(null)
+    private val resumeGeneration = androidx.compose.runtime.mutableIntStateOf(0)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        readRequest(intent)
+        if (savedInstanceState == null) readRequest(intent)
         setContent {
             FinanceMinistryTheme {
-                LedgerApp((application as FinanceMinistryApp).container.repository, request.value) { request.value = null }
+                LedgerApp((application as FinanceMinistryApp).container.repository, request.value, resumeGeneration.intValue) {
+                    request.value = null
+                    intent.removeExtra("transaction_id"); intent.removeExtra("edit")
+                }
             }
         }
     }
+    override fun onResume() { super.onResume(); resumeGeneration.intValue++ }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); readRequest(intent) }
     private fun readRequest(intent: Intent) { request.value = intent.getStringExtra("transaction_id")?.let { it to intent.getBooleanExtra("edit", false) } }
 }

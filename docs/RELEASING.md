@@ -75,6 +75,74 @@ notification. Ordinary service calls and JVM parsing do not prove that platform 
 
 ## Downloads and future production builds
 
+### Signed upgrade verification
+
+Use a disposable emulator with no personal ledger and always select its explicit
+ADB serial. Install the published previous APK first. Build the candidate and its
+instrumentation APK with the same dedicated alpha signer; never install an ordinary
+developer-signed build over an official alpha.
+
+Install the matching test APK with `adb -s SERIAL install -t TEST_APK`, then run:
+
+```sh
+adb -s SERIAL shell am instrument -w -e class in.financeministry.app.OfficialUpgradeTest -e upgradeStage seed in.financeministry.app.test/androidx.test.runner.AndroidJUnitRunner
+adb -s SERIAL install -r CANDIDATE_APK
+adb -s SERIAL shell am instrument -w -e class in.financeministry.app.OfficialUpgradeTest -e upgradeStage verify in.financeministry.app.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+The seed stage creates and edits one synthetic record using the previous app's API.
+The verify stage checks the amount, correction history, migrated schema and reopened
+encrypted storage. Require `OK (1 test)` from both stages; ADB exit status alone is
+not sufficient. Do not uninstall between stages. Repeat verification after stopping
+the process to exercise cold database reopening. This is not proof that Android will
+deliver SMS to a force-stopped app; force-stop and ordinary background process death
+have different platform semantics.
+
+For alpha.2, this protocol passed over the published alpha.1 APK on an isolated
+Android 16 emulator, including cold process reopening. Physical-phone upgrades and
+OEM-specific receiver behavior still need validation.
+
+### Repository concurrency checks
+
+Run `LedgerConcurrencyTest` and `LedgerIntegrationTest` on the isolated emulator
+with the candidate's matching instrumentation APK. These tests use random database
+namespaces and erase only their synthetic ledgers. The concurrency checks exercise
+24 simultaneous duplicate deliveries, duplicates racing a correction, 12 concurrent
+edits with a persisted audit chain, and erasure competing with an active capture
+callback and 16 queued captures. They also verify that erased database keys stay
+absent until a new explicit manual entry creates fresh storage.
+
+Require `OK (14 tests)` for the combined classes. These are single-process repository
+checks, not exhaustive thread scheduling, physical-device, or Android notification
+cancellation tests. Do not run test suites against a personal phone ledger.
+
+### Multipart timing and background process recovery
+
+On the same isolated emulator, run `SmsBroadcastE2eTest` with `runSmsE2e=true`,
+`smsRepetitions=20`, and `expectMultipart=true`. The host must watch
+`files/synthetic_sms_test_ready` using `run-as` and send exactly one synthetic SMS
+per unique `UUID:sequence` marker. Use a unique sample label and enough neutral
+padding to produce multiple segments, ending with the test's INR 314.15 debit.
+Require `OK (1 test)` and inspect the delivered segment counts and timing output.
+The test keeps the five-second assertion and reports all samples before applying it.
+
+Timing is test-observer broadcast arrival to observing the encrypted record and
+active notification, not exact production receiver entry or carrier-to-phone delay.
+On Android 16, 20 three-segment samples passed at median 149 ms, p95 217 ms and max
+1,830 ms with no concurrent build. An earlier run with a concurrent Gradle build
+exceeded five seconds on sample three; host contention is a hypothesis, not a proven
+root cause. Neither run establishes real-phone performance or the PRD latency gate.
+
+For ordinary process recovery, run `ProcessRestartSmsTest` with `restartStage=prepare`
+after the signed-upgrade seed exists. Launch the app, send it Home, then use
+`adb -s SERIAL shell am kill in.financeministry.app`. Confirm `pidof` is empty before
+sending `INR 701.23 credited via UPI; AvlBal: Rs9999.99` through the emulator console.
+Observe the restarted process and notification before starting instrumentation again.
+Run the same test with `restartStage=verify` and require `OK (1 test)`. It checks the
+credit, notification and existing upgrade record, then deletes its synthetic credit
+and restores preferences. Use only a disposable ledger. This protocol passed on the
+isolated Android 16 emulator; it does not cover force-stop, reboot or OEM restrictions.
+
 Users install the next official APK over the old one. The same package name, signer,
 compatible schema and higher version code are necessary for an update. A development
 build signed with a different key can conflict; do not tell users to uninstall
