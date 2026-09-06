@@ -30,7 +30,7 @@ class ManualEntryUiTest {
             rule.onNodeWithText("Save transaction").performScrollTo().performClick()
             rule.waitUntil(15000) { runBlocking { repository.snapshot().rows.any { it.id !in before && it.amountMinor == 51234L } } }
             rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
-            rule.onNodeWithText("₹512.34 · Debit").assertIsDisplayed()
+            rule.onNodeWithText("₹512.34 · Debit").performScrollTo().assertIsDisplayed()
         } finally {
             runBlocking { repository.snapshot().rows.filter { it.id !in before }.forEach { repository.delete(it.id) } }
         }

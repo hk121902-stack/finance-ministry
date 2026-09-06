@@ -6,6 +6,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -81,7 +83,10 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
         }
     }
     Surface(Modifier.fillMaxSize()) {
-        Column(Modifier.safeDrawingPadding().fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val ledgerScroll = rememberScrollState()
+        val pageModifier = Modifier.safeDrawingPadding().fillMaxSize().padding(16.dp)
+        Column(if (!form && selected == null && selectedId == null) pageModifier.verticalScroll(ledgerScroll) else pageModifier,
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Finance Ministry", style = MaterialTheme.typography.headlineMedium)
             Text("Private alpha · On-device only", style = MaterialTheme.typography.labelMedium)
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -137,7 +142,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 val rows = snapshot?.rows.orEmpty()
                 if (loading) Text("Loading transactions…")
                 else if (rows.isEmpty()) Text("No matching transactions. Add one, enable capture, or choose another filter.")
-                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(Modifier.fillMaxWidth().height(320.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(rows, key = { it.id }) { row ->
                         Card(Modifier.fillMaxWidth().clickable { selected = row; selectedId = row.id }) {
                             Column(Modifier.padding(12.dp)) {

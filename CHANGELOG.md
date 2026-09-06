@@ -2,7 +2,14 @@
 
 User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
-## 0.1.0-alpha.2
+## 0.1.0-alpha.3
+
+Includes the alpha.2 improvements below and fixes a small-screen layout issue:
+the ledger page scrolls and reserves visible height for transaction history instead
+of letting the controls shrink it to zero. Alpha.2 was withheld as an unpublished
+draft after this issue was found during final artifact verification.
+
+## 0.1.0-alpha.2 (unpublished draft)
 
 ### Parser reliability
 
