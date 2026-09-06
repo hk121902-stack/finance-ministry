@@ -22,12 +22,19 @@ class NotificationNavigationUiTest {
             System.currentTimeMillis(), `in`.financeministry.app.core.model.TransactionType.Other)) }
         try {
             for (id in listOf(first, second)) `in`.financeministry.app.sms.TransactionNotifications.post(app, runBlocking { repository.get(id)!! }, true)
+            rule.waitUntil(15000) { manager.activeNotifications.map { it.tag }.containsAll(listOf(first, second)) }
             val edit = manager.activeNotifications.single { it.tag == first }.notification.actions.single { it.title.toString() == "Edit" }.actionIntent
             val view = manager.activeNotifications.single { it.tag == second }.notification.contentIntent
             edit.send()
             rule.waitUntil(15000) { rule.onAllNodesWithText("Edit / confirm transaction").fetchSemanticsNodes().isNotEmpty() }
             rule.onNodeWithText("700.01").assertExists()
-            rule.onNodeWithText("Cancel").performScrollTo().performClick()
+            rule.onNodeWithText("Amount (INR)").performTextReplacement("701.01")
+            view.send()
+            rule.waitUntil(15000) { rule.onAllNodesWithText("Open another transaction?").fetchSemanticsNodes().isNotEmpty() }
+            rule.onNodeWithText("Keep editing").performClick()
+            rule.onNodeWithText("701.01").assertExists()
+            rule.onNodeWithText("Cancel").performClick()
+            rule.onNodeWithText("Discard changes").performClick()
             androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().runOnMainSync {
                 androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
                     .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED)

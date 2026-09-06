@@ -16,7 +16,9 @@ class ManualEntryUiTest {
             repository.preferences.edit().putBoolean("sms_disclosure", false).commit()
             rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
             rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+            rule.onNodeWithText("Settings").performClick()
             rule.onNodeWithText("Enable SMS capture").assertExists()
+            rule.onNodeWithText("Home").performClick()
             rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
         } finally { repository.preferences.edit().putBoolean("sms_disclosure", previous).commit() }
     }
@@ -27,10 +29,15 @@ class ManualEntryUiTest {
         try {
             rule.onNodeWithText("+ Add transaction").performClick()
             rule.onNodeWithText("Amount (INR)").performTextInput("512.34")
-            rule.onNodeWithText("Save transaction").performScrollTo().performClick()
-            rule.waitUntil(15000) { runBlocking { repository.snapshot().rows.any { it.id !in before && it.amountMinor == 51234L } } }
+            rule.onNodeWithText("Save transaction").performClick()
+            try {
+                rule.waitUntil(15000) { runBlocking { repository.snapshot().rows.any { it.id !in before && it.amountMinor == 51234L } } }
+            } catch (failure: Throwable) {
+                throw AssertionError("Save did not finish. UI state: ${rule.onRoot().printToString()}", failure)
+            }
             rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
-            rule.onNodeWithText("₹512.34 · Debit").performScrollTo().assertIsDisplayed()
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("₹512.34 · Money out"))
+            rule.onNodeWithText("₹512.34 · Money out").assertIsDisplayed()
         } finally {
             runBlocking { repository.snapshot().rows.filter { it.id !in before }.forEach { repository.delete(it.id) } }
         }

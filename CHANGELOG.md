@@ -2,6 +2,30 @@
 
 User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
+## 0.1.0-alpha.4
+
+- Separate Home from Settings, with recorded totals, date-grouped history and
+  clearer review prompts. Keep existing 100-record history pagination.
+- Simplify manual entry with money-in/out choices, native date/time pickers,
+  optional advanced details, a keyboard-aware Save bar and a discard warning.
+- Introduce a neutral teal light/dark theme and readable transaction labels.
+  Widgets and general-use readiness are not part of this increment.
+
+- Recognize structured `Spent Rs… On … Card … At … On …` and amount-first
+  card-spend messages as card merchant debits, with masked last-four hints and
+  merchant labels. Reject standalone spend chatter, offers and OTP messages.
+- Exclude inline as well as newline-separated `Not You?` security instructions
+  from transaction field inference. Preserve review handling for multiple amounts.
+- Add an opt-in parser evaluation harness that loads private inputs externally;
+  no message corpus is bundled in the app or committed to the public repository.
+
+Known limitations: messages describing both the user's account being debited and
+the recipient being credited can still be rejected. Add missed transactions manually.
+Parser coverage and PRD accuracy targets are not independently human-verified.
+Physical-device testing, widgets, progressive history loading and field-level
+validation polish remain pending. No raw SMS history is retained for reprocessing.
+Install over the previous official alpha; do not uninstall an important ledger.
+
 ## 0.1.0-alpha.3
 
 Includes the alpha.2 improvements below and fixes a small-screen layout issue:

@@ -92,6 +92,46 @@ class FinancialSmsParserTest {
 
     private fun parse(body: String) = parser.parse(IncomingSms("SYNTHETIC-BANK", 1_700_000_000_000, body))
 
+    @Test fun structured_card_spend_variants_record_safe_fields() {
+        for (prefix in listOf("Spent Rs.42", "Rs.42.00 spent", "Spent INR 42.00")) {
+            val result = parse("$prefix On TEST Bank Card 0000 At TEST FOOD2 On 2026-09-06:13:20:14.Not You? To Block+Reissue Call 18000000000/SMS BLOCK CC 0000 to 7000000000")
+            assertEquals(prefix, ParseDecision.Record, result.decision)
+            assertEquals(4200L, result.amountMinor)
+            assertEquals(Direction.Debit, result.direction)
+            assertEquals(TransactionStatus.Successful, result.status)
+            assertEquals(Channel.Card, result.channel)
+            assertEquals(TransactionType.MerchantPayment, result.transactionType)
+            assertEquals("••••0000", result.maskedAccountHint)
+            assertEquals("TEST FOOD2", result.counterpartyLabel)
+        }
+    }
+
+    @Test fun card_spend_rejects_prompts_negation_and_otp() {
+        for (body in listOf(
+            "Spend Rs.42 On TEST Bank Card 0000 At TEST FOOD On 2026-09-06 to earn rewards",
+            "If you spent Rs.42 On TEST Bank Card 0000 At TEST FOOD On 2026-09-06",
+            "You have not spent Rs.42 On TEST Bank Card 0000 At TEST FOOD On 2026-09-06",
+            "Spent Rs.42 on groceries this month",
+            "Spent Rs.42 On TEST Bank Card 1234567890123456 At TEST FOOD On 2026-09-06",
+            "Spent Rs.42 On TEST Bank Card 0000 At TEST FOOD On 2026-09-06.Not You? OTP 123456 for verification"
+        )) assertEquals(body, ParseDecision.Reject, parse(body).decision)
+    }
+
+    @Test fun inline_security_footer_is_not_transaction_evidence() {
+        val result = parse("Spent Rs.42 On TEST Bank Card XX0000 At TEST FOOD On 2026-09-06.Not You? UPI payment failed INR 500")
+        assertEquals(ParseDecision.Record, result.decision)
+        assertEquals(4200L, result.amountMinor)
+        assertEquals(Channel.Card, result.channel)
+        assertEquals(TransactionStatus.Successful, result.status)
+    }
+
+    @Test fun card_spend_ambiguous_amounts_still_require_review() {
+        val result = parse("Spent Rs.42 On TEST Bank Card 0000 At TEST FOOD On 2026-09-06. INR 43 also charged")
+        assertEquals(ParseDecision.NeedsReview, result.decision)
+        assertNull(result.amountMinor)
+        assertEquals(Direction.Debit, result.direction)
+    }
+
     @Test fun scheduled_messages_and_credit_limits_are_not_completed_transactions() {
         listOf("INR 250 will be debited tomorrow", "Your credit limit is INR 50000", "Credit balance INR 900", "INR 100 payment request").forEach {
             assertEquals(it, ParseDecision.Reject, parse(it).decision)

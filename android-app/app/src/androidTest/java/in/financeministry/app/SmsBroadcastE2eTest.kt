@@ -23,6 +23,8 @@ class SmsBroadcastE2eTest {
         val before = repository.snapshot().rows.map { it.id }.toSet()
         val ready = java.io.File(app.filesDir, "synthetic_sms_test_ready")
         val args = InstrumentationRegistry.getArguments()
+        val expectedAmount = args.getString("expectedAmountMinor")?.toLong() ?: 31415L
+        val expectedDirection = args.getString("expectedDirection") ?: "Debit"
         val repetitions = (args.getString("smsRepetitions")?.toInt() ?: 1).also { require(it in 1..20) }
         val multipart = args.getString("expectMultipart") == "true"
         val observedAt = java.util.concurrent.atomic.AtomicLong(0)
@@ -47,14 +49,14 @@ class SmsBroadcastE2eTest {
             observedAt.set(0); segments.set(0)
             ready.writeText("$run:${index + 1}")
             val deadline = System.currentTimeMillis() + 45000
-            var found = repository.snapshot().rows.firstOrNull { it.id !in before && it.amountMinor == 31415L }
+            var found = repository.snapshot().rows.firstOrNull { it.id !in before && it.amountMinor == expectedAmount }
             while (found == null && System.currentTimeMillis() < deadline) {
                 Thread.sleep(150)
-                found = repository.snapshot().rows.firstOrNull { it.id !in before && it.amountMinor == 31415L }
+                found = repository.snapshot().rows.firstOrNull { it.id !in before && it.amountMinor == expectedAmount }
             }
             assertNotNull("Synthetic emulator SMS was not recorded", found)
             assertEquals("SMS", found!!.sourceType)
-            assertEquals("Debit", found.direction)
+            assertEquals(expectedDirection, found.direction)
             assertEquals("AutoRecorded", found.reviewState)
             assertTrue(app.getSystemService(NotificationManager::class.java).activeNotifications.any { it.tag == found.id })
             val observerDeadline = android.os.SystemClock.elapsedRealtime() + 2000
@@ -63,8 +65,12 @@ class SmsBroadcastE2eTest {
             if (multipart) assertTrue("Expected multiple delivered SMS segments", segments.get() > 1)
             val elapsed = android.os.SystemClock.elapsedRealtime() - observedAt.get()
             timings += elapsed
-            assertEquals(1, repository.snapshot().rows.count { it.id !in before && it.amountMinor == 31415L })
+            assertEquals(1, repository.snapshot().rows.count { it.id !in before && it.amountMinor == expectedAmount })
             instrumentation.sendStatus(0, android.os.Bundle().apply {
+                putLong("amountMinor", found.amountMinor!!); putString("direction", found.direction)
+                putString("transactionStatus", found.status); putString("channel", found.channel)
+                putBoolean("hasAccountHint", found.maskedAccountHint != null)
+                putBoolean("hasCounterpartyLabel", found.counterpartyLabel != null)
                 putInt("smsSample", index + 1); putInt("deliveredSegments", segments.get()); putLong("observedCaptureMs", elapsed)
             })
             ready.delete()
@@ -82,7 +88,7 @@ class SmsBroadcastE2eTest {
             ready.delete()
             app.unregisterReceiver(observer)
             prefs.edit().putBoolean("sms_disclosure", oldConsent).putBoolean("notifications", oldNotifications).commit()
-            repository.snapshot().rows.filter { it.id !in before && it.amountMinor == 31415L }.forEach { repository.delete(it.id) }
+            repository.snapshot().rows.filter { it.id !in before && it.amountMinor == expectedAmount }.forEach { repository.delete(it.id) }
         }
     }
 }

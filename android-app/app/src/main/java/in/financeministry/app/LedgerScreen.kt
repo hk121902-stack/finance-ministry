@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import `in`.financeministry.app.data.*
 import `in`.financeministry.app.feature.TransactionForm
+import `in`.financeministry.app.feature.friendly
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.time.Instant
@@ -35,6 +37,10 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var snapshot by remember { mutableStateOf<LedgerSnapshot?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var form by rememberSaveable { mutableStateOf(false) }
+    var dirtyForm by rememberSaveable { mutableStateOf(false) }
+    var requestWarning by remember { mutableStateOf(false) }
+    var requestApproval by remember { mutableIntStateOf(0) }
+    var approvedRequest by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     var selected by remember { mutableStateOf<TransactionEntity?>(null) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var disclosure by remember { mutableStateOf(false) }
@@ -47,6 +53,9 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var filter by rememberSaveable { mutableStateOf("All") }
     var offset by rememberSaveable { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(false) }
+    var settings by rememberSaveable { mutableStateOf(false) }
+    var reviewAvailable by remember { mutableStateOf(false) }
+    BackHandler(enabled = settings && !form && selectedId == null) { settings = false }
     val smsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { captureEnabled = repository.captureAllowed() }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         notificationAvailable = `in`.financeministry.app.sms.TransactionNotifications.available(context)
@@ -68,14 +77,18 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
         try {
             val result = repository.snapshot(offset, filter)
             snapshot = result
+            reviewAvailable = repository.snapshot(0, "Review").rows.isNotEmpty()
             if (result.rows.isEmpty() && offset > 0) offset = maxOf(0, offset - 100)
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (_: Exception) { error = "Cannot open encrypted storage. Existing data was preserved. Erase all only if you intend to delete it." }
         finally { loading = false }
     }
-    LaunchedEffect(request) {
+    LaunchedEffect(request, requestApproval) {
         if (request != null) {
-            selected = null; selectedId = null; form = false
+            if (form && dirtyForm && approvedRequest != request) { requestWarning = true; return@LaunchedEffect }
+            approvedRequest = null
+            dirtyForm = false
+            selected = null; selectedId = null; form = false; settings = false
             try { selected = repository.get(request.first); if (selected == null) error = "This transaction no longer exists." else { selectedId = selected!!.id; form = request.second; error = null } }
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (_: Exception) { error = "Cannot open this transaction. Data was preserved." }
@@ -85,19 +98,32 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     Surface(Modifier.fillMaxSize()) {
         val ledgerScroll = rememberScrollState()
         val pageModifier = Modifier.safeDrawingPadding().fillMaxSize().padding(16.dp)
-        Column(if (!form && selected == null && selectedId == null) pageModifier.verticalScroll(ledgerScroll) else pageModifier,
+        Column(if (settings || (selected != null && !form)) pageModifier.verticalScroll(ledgerScroll) else pageModifier,
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Finance Ministry", style = MaterialTheme.typography.headlineMedium)
-            Text("Private alpha · On-device only", style = MaterialTheme.typography.labelMedium)
+            if (!form && selectedId == null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(if (settings) "Settings" else "Your ledger", style = MaterialTheme.typography.headlineMedium)
+                TextButton(onClick = { settings = !settings }) { Text(if (settings) "Home" else "Settings") }
+            }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (selectedId != null && selected == null) { Text("Loading transaction…") }
             else if (form) {
-                TransactionForm(repository, selected, onDone = { form = false; selected = null; selectedId = null; offset = 0; error = null })
+                TransactionForm(repository, selected, onDone = { dirtyForm = false; form = false; selected = null; selectedId = null; offset = 0; error = null }, onDirtyChange = { dirtyForm = it })
             } else if (selected != null) {
                 val row = selected!!
                 Text(money(row.amountMinor), style = MaterialTheme.typography.headlineSmall)
-                Text("${row.direction} · ${row.status} · ${row.reviewState}")
-                Text("${row.transactionType} · ${row.channel} · ${row.sourceType}")
+                Text("${friendly(row.direction)} · ${friendly(row.status)}")
+                Text("${friendly(row.transactionType)} · ${friendly(row.channel)} · ${friendly(row.sourceType)}")
+                if (row.reviewState == "NeedsReview") Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Check this transaction", style = MaterialTheme.typography.titleMedium)
+                        Text(when {
+                            row.amountMinor == null -> "We couldn’t identify a reliable amount. Enter it to finish recording."
+                            row.direction == "Unknown" -> "Choose whether money went out, came in, or moved between accounts."
+                            row.status == "Unknown" -> "Check whether this payment completed before confirming."
+                            else -> "Check the details before including this transaction in your totals."
+                        })
+                    }
+                } else Text(friendly(row.reviewState), style = MaterialTheme.typography.bodySmall)
                 Text(transactionTime(row.effectiveTimestamp))
                 row.linkedOriginalId?.let { originalId ->
                     TextButton(onClick = { selected = null; selectedId = originalId }) { Text("View linked original transaction") }
@@ -109,13 +135,9 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     OutlinedButton(onClick = { selected = null; selectedId = null }) { Text("Back") }
                 }
                 TextButton(onClick = { deleteDialog = true }) { Text("Delete transaction") }
-            } else {
-                Button(onClick = { selected = null; selectedId = null; form = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("+ Add transaction") }
-                snapshot?.let {
-                    Text("Today: spent ₹${BigDecimal(it.dailyDebit, 2).toPlainString()} · received ₹${BigDecimal(it.dailyCredit, 2).toPlainString()}")
-                    Text("This month: spent ₹${BigDecimal(it.debit, 2).toPlainString()} · received ₹${BigDecimal(it.credit, 2).toPlainString()}")
-                    Text("Excludes transfers, needs-review, failed, reversed and pending records.", style = MaterialTheme.typography.bodySmall)
-                }
+            } else if (settings) {
+                Text("Finance Ministry · Private alpha", style = MaterialTheme.typography.titleMedium)
+                Text("Your ledger stays encrypted on this device. No bank connection or payment access.")
                 OutlinedButton(onClick = {
                     if (captureEnabled) { repository.preferences.edit().putBoolean("sms_disclosure", false).apply(); captureEnabled = false } else disclosure = true
                 }, enabled = !busy) { Text(if (captureEnabled) "Pause SMS capture" else "Enable SMS capture") }
@@ -133,36 +155,70 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)) }) { Text("Open notification settings") }
                     if (Build.VERSION.SDK_INT >= 33) TextButton(onClick = { notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("Allow Android notifications") }
                 }
-                if (repository.preferences.getBoolean("capture_error", false)) Text("A message could not be recorded. Add it manually if needed.", color = MaterialTheme.colorScheme.error)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("All", "Review", "Manual", "Edited").forEach { label ->
-                        FilterChip(selected = filter == label, onClick = { filter = label; offset = 0; snapshot = null }, label = { Text(label) })
+                HorizontalDivider()
+                Text("Data and privacy", style = MaterialTheme.typography.titleMedium)
+                Text("There is no backup or undo. Uninstalling the app or erasing data loses your ledger.")
+                TextButton(onClick = { eraseDialog = true }, enabled = !busy) { Text("Erase all local data", color = MaterialTheme.colorScheme.error) }
+            } else {
+                Button(onClick = { selected = null; selectedId = null; form = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("+ Add transaction") }
+                LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item {
+                    snapshot?.let {
+                        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Recorded this month", style = MaterialTheme.typography.labelLarge)
+                            Text("₹${BigDecimal(it.debit, 2).toPlainString()}", style = MaterialTheme.typography.headlineLarge)
+                            Text("Money out · Received ₹${BigDecimal(it.credit, 2).toPlainString()}")
+                            HorizontalDivider()
+                            Text("Today: spent ₹${BigDecimal(it.dailyDebit, 2).toPlainString()} · received ₹${BigDecimal(it.dailyCredit, 2).toPlainString()}", style = MaterialTheme.typography.bodySmall)
+                            Text("Excludes transfers and unconfirmed, failed, pending or reversed payments. SMS coverage is incomplete.", style = MaterialTheme.typography.bodySmall)
+                        } }
                     }
                 }
+                item {
+                    TextButton(onClick = { settings = true }) { Text(if (captureEnabled) "SMS capture enabled · Manage" else "SMS capture off · Set up") }
+                    if (notifications && !notificationAvailable) Text("Notifications are blocked. Enable them in Settings.", style = MaterialTheme.typography.bodySmall)
+                    if (repository.preferences.getBoolean("capture_error", false)) Text("A message could not be recorded. Add it manually if needed.", color = MaterialTheme.colorScheme.error)
+                    if (reviewAvailable) OutlinedButton(onClick = { if (filter != "Review" || offset != 0) { filter = "Review"; offset = 0; snapshot = null } }, modifier = Modifier.fillMaxWidth()) { Text("Review transactions that need checking") }
+                }
+                item {
+                Text("Transactions", style = MaterialTheme.typography.titleLarge)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("All", "Review", "Manual", "Edited").forEach { label ->
+                        FilterChip(selected = filter == label, onClick = { if (filter != label || offset != 0) { filter = label; offset = 0; snapshot = null } }, label = { Text(label) })
+                    }
+                }
+                }
                 val rows = snapshot?.rows.orEmpty()
-                if (loading) Text("Loading transactions…")
-                else if (rows.isEmpty()) Text("No matching transactions. Add one, enable capture, or choose another filter.")
-                LazyColumn(Modifier.fillMaxWidth().height(320.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (loading) item { Text("Loading transactions…") }
+                else if (rows.isEmpty()) item { Text(if (filter == "Review") "You’re all caught up. No saved transactions need review." else "No transactions here yet. Add one manually or enable new SMS capture in Settings.") }
+                rows.groupBy { Instant.ofEpochMilli(it.effectiveTimestamp).atZone(ZoneId.systemDefault()).toLocalDate() }.forEach { (day, rows) ->
+                    item("day-$day") { Text(day.format(DateTimeFormatter.ofPattern("d MMM yyyy")), style = MaterialTheme.typography.labelLarge) }
                     items(rows, key = { it.id }) { row ->
                         Card(Modifier.fillMaxWidth().clickable { selected = row; selectedId = row.id }) {
                             Column(Modifier.padding(12.dp)) {
-                                Text("${money(row.amountMinor)} · ${row.direction}", style = MaterialTheme.typography.titleMedium)
-                                Text("${row.status} · ${row.sourceType} · ${if (row.isUserCorrected) "Corrected" else row.reviewState}")
+                                Text(row.counterpartyLabel ?: if (row.sourceType == "Manual") "Manual transaction" else "${friendly(row.channel)} transaction", style = MaterialTheme.typography.titleMedium)
+                                Text("${money(row.amountMinor)} · ${friendly(row.direction)}", style = MaterialTheme.typography.titleLarge)
+                                Text("${friendly(row.status)} · ${if (row.isUserCorrected) "Edited by you" else friendly(row.reviewState)}", style = MaterialTheme.typography.bodySmall)
                                 Text(transactionTime(row.effectiveTimestamp), style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { offset = maxOf(0, offset - 100); snapshot = null }, enabled = !loading && offset > 0) { Text("Newer") }
                     Text("Page ${offset / 100 + 1}", Modifier.padding(top = 12.dp))
                     TextButton(onClick = { offset += 100; snapshot = null }, enabled = !loading && snapshot?.hasOlder == true && offset <= Int.MAX_VALUE - 201) { Text("Older") }
                 }
                 Text("All saved history · No historical SMS import", style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = { eraseDialog = true }, enabled = !busy) { Text("Erase all local data") }
+                }
+                }
             }
         }
     }
+    if (requestWarning) AlertDialog(onDismissRequest = { requestWarning = false; consumeRequest() },
+        title = { Text("Open another transaction?") }, text = { Text("Your current changes have not been saved.") },
+        confirmButton = { TextButton(onClick = { approvedRequest = request; requestWarning = false; requestApproval++ }) { Text("Discard and open") } },
+        dismissButton = { TextButton(onClick = { requestWarning = false; consumeRequest() }) { Text("Keep editing") } })
     if (disclosure) AlertDialog(onDismissRequest = { disclosure = false }, title = { Text("Read new SMS on this device?") },
         text = { Text("Android gives this app access to incoming SMS, including non-financial messages. Processing stays on this device. We reject OTPs and non-transactions and store normalized financial fields in encrypted storage. Raw messages and senders are not stored or uploaded. SMS permission is optional; manual entry always works. No payment or bank connection is involved.") },
         confirmButton = { TextButton(onClick = { repository.preferences.edit().putBoolean("sms_disclosure", true).apply(); disclosure = false; smsPermission.launch(Manifest.permission.RECEIVE_SMS) }) { Text("I understand — continue") } },

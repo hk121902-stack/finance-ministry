@@ -6,7 +6,7 @@ An Android expense tracker that records transactions from incoming SMS and lets 
 
 **Status: early alpha.** The release channel is for installable **debug APKs** for testing. The app is being developed by one maintainer and is not ready for general use. Parsing can miss or misclassify transactions; check your records. Do not make this your only financial record.
 
-The current debug alpha is [v0.1.0-alpha.3](https://github.com/hk121902-stack/finance-ministry/releases/tag/v0.1.0-alpha.3).
+The current debug alpha is [v0.1.0-alpha.4](https://github.com/hk121902-stack/finance-ministry/releases/tag/v0.1.0-alpha.4).
 Download the debug APK from its assets. The release includes its SHA-256 checksum,
 signing-certificate details, and license notices. Physical-device testing is pending.
 
@@ -15,7 +15,8 @@ signing-certificate details, and license notices. Physical-device testing is pen
 - Capture new financial SMS after you explicitly enable SMS access.
 - Save a normalized transaction first, then send an optional native notification with **View** and **Edit**.
 - Keep uncertain detections in **Review**, including transactions whose amount could not be safely extracted.
-- Add manual transactions with amount, direction, time, category, and optional details.
+- Add manual transactions with money-in/out choices, date/time pickers and optional details.
+- Use separate Home and Settings screens, light/dark themes and unsaved-edit warnings.
 - Edit records, keep correction history, delete individual records, or erase all local data.
 - Browse history in 100-record pages, filter manual/review/edited entries, and see daily/monthly debit and credit totals.
 - Extract supported masked account hints and recipient labels; conservatively link full-amount refunds/reversals when strong matching evidence exists.
@@ -30,17 +31,21 @@ Requires **Android 8.0 (API 26) or newer**. Current runtime verification is on a
 1. Open [Releases](https://github.com/hk121902-stack/finance-ministry/releases) and choose the newest **pre-release**. Download its `finance-ministry-*-debug.apk`, not the source-code ZIP.
 2. Install the APK on a test device. Android may ask you to allow installations from the app you used to download it.
 3. Open Finance Ministry. **+ Add transaction** works immediately without SMS or notification permissions.
-4. For automatic capture, tap **Enable SMS capture**, read the disclosure, and continue through Android's SMS permission prompt. **Pause SMS capture** means capture is currently enabled.
-5. Tap **Allow Android notifications** and allow the separate Android prompt. The in-app notification switch and Android permission are independent; both must be on for notifications.
+4. Open **Settings → Enable SMS capture**, read the disclosure, and continue through Android's SMS permission prompt. **Pause SMS capture** means capture is currently enabled.
+5. In **Settings**, enable **Recording notifications** and allow the separate Android prompt. If blocked, use **Allow Android notifications** or **Open notification settings**. The in-app switch and Android permission are independent; both must be on for notifications.
 6. New eligible messages are recorded automatically. Open a row or its notification to review or correct it.
 
-Manual example: enter `250.50`, keep Debit / Other / Successful, and save. The ledger marks it **Manual · Confirmed**.
+Manual example: enter `250.50`, keep **Money out**, and save. Cash, Other and Successful are the defaults; transaction type and payment status are under **More details**. The ledger shows **Confirmed by you**.
 
 Emulator-only automatic example (this command does not send a real SMS):
 ```sh
 adb -s emulator-5554 emu sms send 5551234 "INR 314.15 debited from your account via UPI"
 ```
-With capture enabled, this produces an **SMS · AutoRecorded** debit. With notifications allowed, it also produces a notification. A message such as `Your account debited by 250` goes to **Review** because the currency amount is uncertain.
+With capture enabled, this produces a **Money out · Saved automatically** transaction. With notifications allowed, it also produces a notification. A message such as `Your account debited by 250` goes to **Review** because the currency amount is uncertain.
+
+Known parser gap: an SMS saying your account was debited and the recipient was
+credited may be missed. Add it manually. The alpha does not guarantee complete SMS
+coverage, and updating does not reprocess old messages. See the [open issues](docs/ROADMAP.md#confirmed-open-parser-issues).
 
 ### Updating
 

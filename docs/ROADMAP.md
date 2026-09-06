@@ -38,7 +38,32 @@ Backup/export remains a separate scope decision; the current loss-risk disclosur
 stays mandatory. Historical SMS import, cloud sync, messenger integrations and
 financial-service integrations are not added to the MVP.
 
+### Confirmed open parser issues
+
+- **Account debit / recipient credit conflict — high priority, not fixed.**
+  Confirmed on published `0.1.0-alpha.3` in the Android emulator on 2026-09-06:
+  the SMS capture test found no transaction after 45 seconds. Direct evaluation
+  returned `Reject` / `no_decisive_transaction`, with unknown direction and status.
+  The parser treats both movement words as conflicting without identifying whose
+  account they describe.
+  - Sanitized reproduction: `ICICI Bank Acct XX000 debited for Rs 42.00 on 06-Sep-26; TEST PERSON credited. UPI:000000000000. Call 18002662 for dispute. SMS BLOCK 000 to 9215676766.`
+  - Expected: one successful INR 42.00 UPI debit from the user's account, with
+    the normal saved-record notification when enabled.
+  - Acceptance: infer direction from the account-holder clause; add parser
+    regressions and an emulator capture/notification test. Preserve conservative
+    handling of genuinely ambiguous or multiple transactions and verify that
+    ordinary incoming credits still work.
+  - Workaround: add the missed transaction manually. No fix or release is claimed.
+
 ### Engineering follow-up
+
+The first usability increment is included in alpha.4: separate
+Home/Settings, recorded summaries, date-grouped history, simpler manual entry,
+native date/time pickers, clearer review prompts, light/dark colours and unsaved-edit
+protection. Existing 100-record paging remains; progressive loading, field-level
+validation polish and measured under-15-second add/edit usability remain follow-ups.
+Parser reliability issues above are still open. An optional home-screen quick-add
+widget comes later; financial summaries require an explicit privacy choice.
 
 - Expand synthetic parser regressions and human-reviewed accuracy evaluation.
 - Validate Redmi and other physical devices, OEM background behavior and multipart SMS.

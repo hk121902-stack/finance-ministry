@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.content.Intent
 import androidx.compose.runtime.mutableStateOf
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ class MainActivity : ComponentActivity() {
     private val resumeGeneration = androidx.compose.runtime.mutableIntStateOf(0)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         if (savedInstanceState == null) readRequest(intent)
         setContent {
             FinanceMinistryTheme {
@@ -42,7 +44,25 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun FinanceMinistryTheme(content: @Composable () -> Unit) {
-    MaterialTheme(content = content)
+    val dark = androidx.compose.foundation.isSystemInDarkTheme()
+    val colors = if (dark) androidx.compose.material3.darkColorScheme(
+        primary = androidx.compose.ui.graphics.Color(0xFF8AD5CA),
+        background = androidx.compose.ui.graphics.Color(0xFF101817),
+        surface = androidx.compose.ui.graphics.Color(0xFF101817),
+        surfaceVariant = androidx.compose.ui.graphics.Color(0xFF263C38),
+        surfaceContainerHighest = androidx.compose.ui.graphics.Color(0xFF263C38),
+        secondaryContainer = androidx.compose.ui.graphics.Color(0xFF224D45)
+    ) else androidx.compose.material3.lightColorScheme(
+        primary = androidx.compose.ui.graphics.Color(0xFF176B60),
+        onPrimary = androidx.compose.ui.graphics.Color.White,
+        primaryContainer = androidx.compose.ui.graphics.Color(0xFFD4EEE6),
+        background = androidx.compose.ui.graphics.Color(0xFFF7F9F6),
+        surface = androidx.compose.ui.graphics.Color(0xFFF7F9F6),
+        surfaceVariant = androidx.compose.ui.graphics.Color(0xFFE4EDE7),
+        surfaceContainerHighest = androidx.compose.ui.graphics.Color(0xFFE4EDE7),
+        secondaryContainer = androidx.compose.ui.graphics.Color(0xFFD4EEE6)
+    )
+    MaterialTheme(colorScheme = colors, content = content)
 }
 
 @Composable
