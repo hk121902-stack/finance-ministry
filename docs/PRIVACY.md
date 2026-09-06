@@ -8,7 +8,16 @@ transaction ledger. There is no sign-up or app backend.
 `RECEIVE_SMS` is optional and requested only after an in-app disclosure. Android
 delivers incoming messages broadly, including non-financial messages; the app filters
 them on-device and rejects OTP/verification and non-transaction messages. It does not
-request `READ_SMS`, `SEND_SMS`, contacts, notification-listener access or Internet.
+request `SEND_SMS`, contacts, notification-listener access or Internet.
+
+From alpha.5, builds also offer optional `READ_SMS` access, requested only after
+a separate historical-import disclosure. Android grants broad inbox access; the app
+queries only the last three calendar months and filters messages locally. The preview
+keeps normalized financial fields in memory until confirmation, cancellation or leaving
+Settings. Import saves those fields and batch metadata, never raw messages or senders.
+It does not change your phone's SMS or send individual import notifications. Undo removes
+untouched records in a batch and preserves user edits. Erase all clears import previews
+and invalidates scans. Alpha.4 and earlier do not include this permission or feature.
 
 `POST_NOTIFICATIONS` is separate. Disabling notifications does not disable otherwise
 authorized capture. Manual entry works without either permission. The in-app capture

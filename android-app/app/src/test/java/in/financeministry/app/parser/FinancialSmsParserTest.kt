@@ -92,6 +92,41 @@ class FinancialSmsParserTest {
 
     private fun parse(body: String) = parser.parse(IncomingSms("SYNTHETIC-BANK", 1_700_000_000_000, body))
 
+    @Test fun icici_account_debit_and_recipient_credit_is_one_outgoing_payment() {
+        for (body in listOf(
+            "ICICI Bank Acct XX000 debited for Rs 42.00 on 06-Sep-26; TEST PERSON credited. UPI:000000000000. Call 18002662 for dispute. SMS BLOCK 000 to 9215676766.",
+            "ICICI BANK ACCT XX0000 debited for Rs. 42.00 on 06-Sep-26; TEST SHOP credited. UPI:000000000000."
+        )) {
+            val result = parse(body)
+            assertEquals(ParseDecision.Record, result.decision)
+            assertEquals(4200L, result.amountMinor)
+            assertEquals(Direction.Debit, result.direction)
+            assertEquals(TransactionStatus.Successful, result.status)
+            assertEquals(Channel.UPI, result.channel)
+        }
+    }
+
+    @Test fun mixed_movement_exceptions_do_not_guess_or_merge_events() {
+        val start = "ICICI Bank Acct XX000 debited for Rs 42.00 on 06-Sep-26; "
+        for (tail in listOf(
+            "your account credited. UPI:000000000000.",
+            "TEST PERSON credited. UPI:000000000000. Your account credited again.",
+            "TEST PERSON credited. UPI:000000000000. INR 10 credited to your account."
+        )) assertFalse(parse(start + tail).decision == ParseDecision.Record)
+        assertFalse(parse("INR 42 debited and credited to your account via UPI").decision == ParseDecision.Record)
+    }
+
+    @Test fun icici_credit_and_safety_guards_are_preserved() {
+        val credit = parse("Dear Customer, Acct XX000 is credited with Rs 11.00 on 06-Sep-26 from TEST PERSON. UPI:000000000000-ICICI Bank.")
+        assertEquals(ParseDecision.Record, credit.decision)
+        assertEquals(Direction.Credit, credit.direction)
+        assertEquals(1100L, credit.amountMinor)
+        val debit = "ICICI Bank Acct XX000 debited for Rs 42.00 on 06-Sep-26; TEST PERSON credited. UPI:000000000000."
+        assertEquals(ParseDecision.Reject, parse("OTP 123456. $debit").decision)
+        assertEquals(ParseDecision.Reject, parse(debit.replace("debited for", "will be debited for")).decision)
+        assertEquals(ParseDecision.Reject, parse(debit.replace("debited for", "not debited for")).decision)
+    }
+
     @Test fun structured_card_spend_variants_record_safe_fields() {
         for (prefix in listOf("Spent Rs.42", "Rs.42.00 spent", "Spent INR 42.00")) {
             val result = parse("$prefix On TEST Bank Card 0000 At TEST FOOD2 On 2026-09-06:13:20:14.Not You? To Block+Reissue Call 18000000000/SMS BLOCK CC 0000 to 7000000000")

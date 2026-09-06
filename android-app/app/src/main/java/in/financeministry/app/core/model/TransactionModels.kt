@@ -13,7 +13,7 @@ enum class ParseDecision { Record, NeedsReview, Reject }
 enum class Direction { Debit, Credit, Transfer, Unknown }
 enum class TransactionStatus { Successful, Failed, Reversed, Pending, Unknown }
 enum class Channel { UPI, Card, ATM, IMPS, NEFT, RTGS, BankTransfer, CashManual, Other, Unknown }
-enum class TransactionType { MerchantPayment, P2PTransfer, SelfTransfer, SalaryIncome, Refund, Reversal, CashWithdrawal, Deposit, FeeCharge, Other, Unknown }
+enum class TransactionType { MerchantPayment, P2PTransfer, SelfTransfer, CardRepayment, SalaryIncome, Refund, Reversal, CashWithdrawal, Deposit, FeeCharge, Other, Unknown }
 enum class SourceType { SMS, Manual }
 enum class ReviewState { AutoRecorded, NeedsReview, Confirmed }
 

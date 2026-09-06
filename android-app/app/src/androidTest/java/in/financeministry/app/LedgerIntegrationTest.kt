@@ -50,6 +50,27 @@ class LedgerIntegrationTest {
         } finally { repository.eraseAll(); repository.close() }
     }
 
+    @Test fun card_repayments_are_excluded_from_totals_even_when_confirmed() = runBlocking {
+        val name = namespace()
+        val repository = TransactionRepository(context, name)
+        val now = System.currentTimeMillis()
+        try {
+            val db = FinanceDatabase.open(context, DeviceSecrets(context, name).databasePassphrase(false), "$name.db")
+            try {
+                for (direction in listOf("Credit", "Debit")) db.transactions().insert(TransactionEntity(
+                    id = direction, sourceType = "SMS", sourceTimestamp = now, effectiveTimestamp = now,
+                    amountMinor = 4200, direction = direction, status = "Successful", channel = "Card",
+                    transactionType = "CardRepayment", reviewState = "Confirmed", createdAt = now, updatedAt = now))
+            } finally { db.close() }
+            val snapshot = repository.snapshot()
+            assertEquals(2, snapshot.rows.size)
+            assertEquals("0", snapshot.credit.toString())
+            assertEquals("0", snapshot.debit.toString())
+            assertEquals("0", snapshot.dailyCredit.toString())
+            assertEquals("0", snapshot.dailyDebit.toString())
+        } finally { repository.eraseAll(); repository.close() }
+    }
+
     @Test fun manual_edit_audit_totals_delete_and_nullable_fingerprints() = runBlocking {
         val name = namespace(); val repository = TransactionRepository(context, name)
         try {
@@ -299,7 +320,8 @@ class LedgerIntegrationTest {
     @Test fun manifest_and_packaged_backup_rules_enforce_local_only() {
         val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS or PackageManager.GET_RECEIVERS)
         val permissions = info.requestedPermissions.orEmpty().toSet()
-        listOf(Manifest.permission.INTERNET, Manifest.permission.READ_SMS, Manifest.permission.SEND_SMS).forEach { assertFalse(permissions.contains(it)) }
+        listOf(Manifest.permission.INTERNET, Manifest.permission.SEND_SMS).forEach { assertFalse(permissions.contains(it)) }
+        assertTrue(permissions.contains(Manifest.permission.READ_SMS))
         assertTrue(permissions.contains(Manifest.permission.RECEIVE_SMS))
         assertEquals(0, context.applicationInfo.flags and ApplicationInfo.FLAG_ALLOW_BACKUP)
         assertEquals("android.permission.BROADCAST_SMS", info.receivers.orEmpty().single { it.name.endsWith("SmsReceiver") }.permission)

@@ -6,7 +6,7 @@ An Android expense tracker that records transactions from incoming SMS and lets 
 
 **Status: early alpha.** The release channel is for installable **debug APKs** for testing. The app is being developed by one maintainer and is not ready for general use. Parsing can miss or misclassify transactions; check your records. Do not make this your only financial record.
 
-The current debug alpha is [v0.1.0-alpha.4](https://github.com/hk121902-stack/finance-ministry/releases/tag/v0.1.0-alpha.4).
+The current debug alpha is [v0.1.0-alpha.5](https://github.com/hk121902-stack/finance-ministry/releases/tag/v0.1.0-alpha.5).
 Download the debug APK from its assets. The release includes its SHA-256 checksum,
 signing-certificate details, and license notices. Physical-device testing is pending.
 
@@ -22,7 +22,20 @@ signing-certificate details, and license notices. Physical-device testing is pen
 - Extract supported masked account hints and recipient labels; conservatively link full-amount refunds/reversals when strong matching evidence exists.
 - Store the ledger in an encrypted Room/SQLCipher database with keys protected by Android Keystore.
 
-The app has no account, cloud sync, ads, analytics, payment initiation, bank API connection, or Internet permission. It reads **new incoming SMS only**; it does not import message history or require becoming the default SMS app.
+The app has no account, cloud sync, ads, analytics, payment initiation, bank API connection, or Internet permission. It supports new incoming SMS and optional history import without becoming the default SMS app.
+
+### Import existing SMS
+
+**Settings → Import last 3 months** offers an optional, on-device SMS history scan.
+Read the disclosure and grant inbox access, inspect the preview, then confirm import.
+Original SMS receipt dates are kept; repeat SMS fingerprints are skipped and uncertain
+records go to Review. Import sends no per-record notifications. You can cancel or undo
+the latest import; undo preserves edited and pre-existing records. Permission denial
+does not block manual entry. Android/installer restrictions can prevent inbox access.
+Only SMS still in the inbox are available, not deleted messages, RCS or other apps.
+Each preview is limited to 20,000 SMS / 5,000 candidate transactions; exceeding either
+stops the scan without importing. This is not bank reconciliation: separate alerts or
+manually entered copies of the same payment may still need review.
 
 ## Try the alpha
 
@@ -43,9 +56,10 @@ adb -s emulator-5554 emu sms send 5551234 "INR 314.15 debited from your account 
 ```
 With capture enabled, this produces a **Money out · Saved automatically** transaction. With notifications allowed, it also produces a notification. A message such as `Your account debited by 250` goes to **Review** because the currency amount is uncertain.
 
-Known parser gap: an SMS saying your account was debited and the recipient was
-credited may be missed. Add it manually. The alpha does not guarantee complete SMS
-coverage, and updating does not reprocess old messages. See the [open issues](docs/ROADMAP.md#confirmed-open-parser-issues).
+Parser version 5 recognizes the supported ICICI account-debit/recipient-credit
+template and additional bank/card formats. Coverage is not guaranteed. Updating does
+not change existing records; use the optional import for missed SMS still in your inbox.
+See the [remaining parser work](docs/ROADMAP.md#confirmed-open-parser-issues).
 
 ### Updating
 
@@ -62,10 +76,10 @@ The app does not keep raw SMS bodies or senders in its database. Manually entere
 ## Known limitations
 
 - English heuristic parsing, primarily INR; no measured production-accuracy guarantee.
-- No historical SMS import, iOS app, WhatsApp/Telegram/Discord capture, or automatic bank reconciliation.
-- Refund/reversal linking and SMS account-hint extraction remain unfinished. Review these records manually.
+- No iOS app, WhatsApp/Telegram/Discord capture, or automatic bank reconciliation.
+- Refund/reversal linking and masked account hints cover supported formats only. Imported refunds/reversals require review.
 - Monthly summaries exclude failed, reversed, pending, transfer and needs-review records. They are transaction summaries, not a verified account balance.
-- The ledger shows the latest 500 entries; older-history navigation and daily summaries are planned.
+- History is paginated in 100-record pages; summaries are not verified bank balances.
 - OEM background restrictions, multipart edge cases, permission lifecycle behavior, and real-phone reliability need broader testing.
 - No automatic updater; check Releases for updates.
 

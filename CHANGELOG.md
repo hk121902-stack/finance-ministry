@@ -2,6 +2,36 @@
 
 User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
+## Unreleased
+
+## 0.1.0-alpha.5
+
+- Add opt-in last-three-calendar-month SMS import in Settings, with separate inbox
+  permission/disclosure, normalized preview, confirmation, duplicate checks,
+  original receipt dates, cancellation and batch undo preserving edits. No import
+  notification flood or raw SMS storage. Add non-destructive database migration 2→3.
+
+- Recognize the bounded ICICI masked-account debit / named-recipient credit UPI
+  template as one outgoing payment. Preserve conservative handling of mixed events,
+  incoming credits and OTP/scheduled/negated messages.
+- Expand bounded recognition for BOB Dr./Cr. payments, Axis and ICICI card spends,
+  HDFC card-UPI/received/deposited/mandate alerts, Pluxee wallet spends and fees,
+  posted and initiated refunds, card repayments and secondary payment receipts.
+- Require movement evidence instead of treating credit/debit card product names
+  or standalone processing text as transactions. Support compact INR amounts,
+  single-digit wallet timestamps and balance/limit labels containing "is".
+- Classify card repayments separately and exclude them from recorded totals.
+  Keep supported merchant receipts and card-autopay confirmations in review to
+  avoid automatically double-counting a corresponding bank/card alert. This is
+  conservative review routing, not cross-source automatic reconciliation.
+- Parser version is now 5. Existing saved records are not automatically changed;
+  previously misclassified repayments can be corrected using Card Repayment.
+- Old SMS are read only through
+  the explicitly confirmed import flow; existing saved records are not reprocessed.
+- Automated validation: 35 JVM tests and 24 distinct emulator tests passed before
+  release preparation. Manual/physical-device testing is waived for this debug alpha,
+  not claimed as completed. Install over the previous official alpha; do not uninstall.
+
 ## 0.1.0-alpha.4
 
 - Separate Home from Settings, with recorded totals, date-grouped history and

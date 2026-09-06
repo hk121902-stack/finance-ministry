@@ -156,8 +156,9 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     if (Build.VERSION.SDK_INT >= 33) TextButton(onClick = { notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("Allow Android notifications") }
                 }
                 HorizontalDivider()
+                `in`.financeministry.app.feature.HistoricalImportPanel(repository)
                 Text("Data and privacy", style = MaterialTheme.typography.titleMedium)
-                Text("There is no backup or undo. Uninstalling the app or erasing data loses your ledger.")
+                Text("There is no backup or recovery after erasing data. Uninstalling the app loses your ledger.")
                 TextButton(onClick = { eraseDialog = true }, enabled = !busy) { Text("Erase all local data", color = MaterialTheme.colorScheme.error) }
             } else {
                 Button(onClick = { selected = null; selectedId = null; form = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("+ Add transaction") }
@@ -209,7 +210,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     Text("Page ${offset / 100 + 1}", Modifier.padding(top = 12.dp))
                     TextButton(onClick = { offset += 100; snapshot = null }, enabled = !loading && snapshot?.hasOlder == true && offset <= Int.MAX_VALUE - 201) { Text("Older") }
                 }
-                Text("All saved history · No historical SMS import", style = MaterialTheme.typography.bodySmall)
+                Text("All saved history · Import past SMS from Settings", style = MaterialTheme.typography.bodySmall)
                 }
                 }
             }

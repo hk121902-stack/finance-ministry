@@ -27,7 +27,7 @@ human validation; synthetic tests are not a measured bank-template accuracy scor
 | Capture and notifications | Resume status, notification navigation, multipart delivery and receiver restart after ordinary background process kill verified on an isolated Android 16 emulator. Twenty three-segment messages passed with observed median 149 ms / p95 217 ms / max 1,830 ms; an earlier run with a concurrent build exceeded five seconds. Real-device latency and OEM background behavior remain open. |
 | Data control and upgrades | Signed upgrade, cold reopening and receiver restart verified on an isolated emulator. Single-process duplicate/correction races, concurrent audit chains and capture/erasure races also pass against encrypted storage. Physical upgrades and broader lifecycle/fault-injection checks remain. |
 | Privacy | Verify logs, backups, notifications and network behavior against the privacy notice. |
-| Accuracy gate | Human-label 133 candidates plus sampled rejections; evaluate the Android parser against PRD precision/recall and field-accuracy targets. |
+| Accuracy gate | Full private 428-SMS corpus reviewed by the assistant and used for parser regression measurement. Independent human labels and a fresh unseen holdout are still required; development-corpus scores are not general-use acceptance. |
 | Device gate | Complete Redmi testing and cover at least three OEM/version combinations. |
 | User gate | 5–10 target users for two weeks; measure correction burden, missing records and continued-use intent. |
 | General-use gate | Harden and verify a non-debug build; review distribution requirements for the chosen channel. |
@@ -35,12 +35,31 @@ human validation; synthetic tests are not a measured bank-template accuracy scor
 GitHub debug APKs are the alpha distribution channel. Play Store distribution is a
 separate decision and review gate, not a prerequisite claimed for this GitHub alpha.
 Backup/export remains a separate scope decision; the current loss-risk disclosure
-stays mandatory. Historical SMS import, cloud sync, messenger integrations and
-financial-service integrations are not added to the MVP.
+stays mandatory. Optional last-three-month SMS import is now an approved local
+addition in alpha.5: preview/confirm, separate permission and batch undo.
+Physical-device permission and inbox-provider validation remain required. Cloud sync,
+messenger integrations and financial-service integrations remain out of scope.
+
+Local import verification: 35 JVM tests and 24 distinct Android emulator tests pass,
+including real-inbox synthetic SMS import, permission denial, repeat/live-capture
+duplicates, cancellation before confirmation, edit-preserving undo, preview erasure
+and encrypted schema upgrades. Build passes; lint reports zero errors and 20 warnings.
+This does not establish physical-device reliability or independent parser accuracy.
 
 ### Confirmed open parser issues
 
-- **Account debit / recipient credit conflict — high priority, not fixed.**
+- **Corpus coverage and false review noise — parser-v5 fixes in alpha.5.**
+  Added supported BOB, Axis, HDFC, ICICI and Pluxee formats plus refund/receipt
+  handling. Product names alone no longer establish debit/credit movements.
+  Card repayments are excluded from totals; secondary receipts and card-autopay
+  confirmations remain reviewable. Cross-source reconciliation, broader bank
+  templates and independent holdout/device validation remain open. Old records
+  are not reprocessed or silently recategorized.
+  Fixed-corpus regression now captures 137/137 labeled transaction messages and
+  rejects 288/288 labeled non-transactions. Three scope-ambiguous messages remain
+  excluded; this is assistant-reviewed development data, not holdout acceptance.
+
+- **Account debit / recipient credit conflict — fixed in alpha.5 for the supported ICICI template.**
   Confirmed on published `0.1.0-alpha.3` in the Android emulator on 2026-09-06:
   the SMS capture test found no transaction after 45 seconds. Direct evaluation
   returned `Reject` / `no_decisive_transaction`, with unknown direction and status.
@@ -53,7 +72,12 @@ financial-service integrations are not added to the MVP.
     regressions and an emulator capture/notification test. Preserve conservative
     handling of genuinely ambiguous or multiple transactions and verify that
     ordinary incoming credits still work.
-  - Workaround: add the missed transaction manually. No fix or release is claimed.
+  - Local verification: the exact reported message recorded INR 534.00 as a successful
+    UPI debit with a notification on the Android emulator. Synthetic regressions
+    cover ordinary credits, multiple events, OTPs and future/negated movements.
+    Account hints and recipient labels remain unextracted for this template.
+  - Alpha.5 includes this fix. Existing saved records are not reprocessed;
+    missed SMS still in the inbox can be included through optional history import.
 
 ### Engineering follow-up
 

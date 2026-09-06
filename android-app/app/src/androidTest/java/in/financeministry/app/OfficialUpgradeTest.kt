@@ -32,7 +32,7 @@ class OfficialUpgradeTest {
             try {
                 assertTrue(db.transactions().corrections(id).any { it.fieldName == "amountMinor" && it.previousValue == "4200" && it.newValue == "4300" })
                 assertNull(db.transactions().get(id)!!.referenceHash)
-                assertEquals(2, db.openHelper.readableDatabase.version)
+                assertEquals(3, db.openHelper.readableDatabase.version)
             } finally { db.close() }
             assertEquals(4300L, repository.get(id)!!.amountMinor)
             repository.close()
