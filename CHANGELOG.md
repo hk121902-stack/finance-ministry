@@ -19,6 +19,13 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 - Add Flat expenses as a transaction category, separate from payment purpose.
 - Add Family as a payment purpose and transaction filter. Family expenses count
   toward your spending and do not create repayment balances.
+- Align the native ledger with the approved calm-ledger design: a dominant monthly
+  spending summary, separate all-date amount owed, an explicit review task, and
+  lighter divider-separated transaction rows.
+- Keep manual entry focused on amount, label, category and payment purpose; date,
+  source and notes remain available under More details.
+- Make first-run setup clearly optional and keep adding a transaction immediately
+  available from the welcome card.
 
 ## 0.1.0-alpha.10
 

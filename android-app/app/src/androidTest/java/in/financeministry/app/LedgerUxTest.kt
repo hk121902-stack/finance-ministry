@@ -88,6 +88,12 @@ class LedgerUxTest {
         rule.onNodeWithText("How totals work").assertDoesNotExist()
     }
 
+    @Test fun overview_uses_the_monthly_summary_hierarchy() {
+        rule.waitUntil(15000) { rule.onAllNodesWithText("Money out · month").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Whole month").assertIsDisplayed()
+        rule.onNodeWithText("Still owed to you").assertIsDisplayed()
+    }
+
     @Test fun settings_are_separate_and_return_to_home() {
         rule.onNodeWithText("Erase all local data").assertDoesNotExist()
         rule.onNodeWithText("Settings").performClick()
@@ -127,7 +133,7 @@ class LedgerUxTest {
             openFilters()
             rule.onNode(hasText("Money out") and hasAnyAncestor(isDialog())).performClick()
             rule.onNodeWithText("Apply").performClick()
-            rule.waitUntil(15000) { rule.onAllNodesWithText("Loading transactions…").fetchSemanticsNodes().isEmpty() }
+            rule.waitUntil(15000) { rule.onAllNodesWithText("1 matching transaction").fetchSemanticsNodes().isNotEmpty() }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(debitLabel))
             rule.onNodeWithText(debitLabel).assertIsDisplayed()
             rule.onNodeWithText(creditLabel).assertDoesNotExist()
@@ -135,7 +141,7 @@ class LedgerUxTest {
             openFilters()
             rule.onNodeWithText("Money in").performClick()
             rule.onNodeWithText("Apply").performClick()
-            rule.waitUntil(15000) { rule.onAllNodesWithText("Loading transactions…").fetchSemanticsNodes().isEmpty() }
+            rule.waitUntil(15000) { rule.onAllNodesWithText("1 matching transaction").fetchSemanticsNodes().isNotEmpty() }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(creditLabel))
             rule.onNodeWithText(creditLabel).assertIsDisplayed()
             rule.onNodeWithText(debitLabel).assertDoesNotExist()
@@ -259,8 +265,6 @@ class LedgerUxTest {
 
             rule.waitForIdle()
             rule.onNodeWithContentDescription("Open transactions").performClick()
-            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("All"))
-            rule.onNodeWithText("All").performClick()
             val linkedCards = hasText("₹42.00") and hasText("Money out")
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(linkedCards)
             rule.onAllNodes(linkedCards)[1].performClick()

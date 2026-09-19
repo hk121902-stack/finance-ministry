@@ -270,24 +270,26 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     }
                 }
             } else {
-                if (destination != "Review") Button(onClick = { selected = null; selectedId = null; form = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("+ Add transaction") }
                 LazyColumn(Modifier.fillMaxWidth().weight(1f), state = ledgerListState, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (destination == "Overview" && showGuide) item {
                     `in`.financeministry.app.feature.FirstUseGuide(captureEnabled, paymentSources.any { it.active },
                         repository.preferences.getBoolean("review_reminder", false),
                         onDone = { repository.preferences.edit().putBoolean("onboarding_complete", true).apply(); showGuide = false },
+                        onAdd = { repository.preferences.edit().putBoolean("onboarding_complete", true).apply(); showGuide = false; selected = null; selectedId = null; form = true },
                         onOpenSms = { showGuide = false; settings = true; settingsSection = "SMS & messages" },
                         onOpenSources = { showGuide = false; settings = true; settingsSection = "Payment sources" },
                         onOpenReminder = { showGuide = false; settings = true; settingsSection = "Review reminders" })
                 }
                 if (destination == "Overview") item {
                     snapshot?.let {
-                        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                 TextButton(onClick = { selectedMonth = java.time.YearMonth.parse(selectedMonth).minusMonths(1).toString(); offset = 0; snapshot = null },
                                     modifier = Modifier.semantics { contentDescription = "Previous month" }) { Text("‹") }
-                                Text(java.time.YearMonth.parse(selectedMonth).format(DateTimeFormatter.ofPattern("MMMM uuuu")),
-                                    style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
+                                Column(Modifier.weight(1f), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                                    Text(java.time.YearMonth.parse(selectedMonth).format(DateTimeFormatter.ofPattern("MMMM uuuu")), style = MaterialTheme.typography.titleMedium)
+                                    Text("Whole month", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                                 TextButton(onClick = { selectedMonth = java.time.YearMonth.parse(selectedMonth).plusMonths(1).toString(); offset = 0; snapshot = null },
                                     modifier = Modifier.semantics { contentDescription = "Next month" }) { Text("›") }
                             }
@@ -297,16 +299,12 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                                 IconButton(onClick = { showSummaryDetails = true }, modifier = Modifier.semantics { contentDescription = "How totals work" }) { Text("ⓘ") }
                             }
                             Text(money(it.personalSpend), style = MaterialTheme.typography.headlineMedium)
+                            Text("Personal, family and your group share", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            HorizontalDivider()
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                 Column(Modifier.weight(1f)) { Text("Money out · month", style = MaterialTheme.typography.labelSmall); Text(money(it.debit), style = MaterialTheme.typography.titleSmall) }
                                 Column(Modifier.weight(1f)) { Text("Money in · month", style = MaterialTheme.typography.labelSmall); Text(money(it.credit), style = MaterialTheme.typography.titleSmall) }
                             }
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                Column(Modifier.weight(1f)) { Text("Paid for others · month", style = MaterialTheme.typography.labelSmall); Text(money(it.paidForOthers), style = MaterialTheme.typography.titleSmall) }
-                                Column(Modifier.weight(1f)) { Text("Still owed · all dates", style = MaterialTheme.typography.labelSmall); Text(money(it.outstandingRepayments), style = MaterialTheme.typography.titleSmall) }
-                            }
-                            if (java.time.YearMonth.parse(selectedMonth) == java.time.YearMonth.now())
-                                Text("Today: ${money(it.dailyDebit)} out · ${money(it.dailyCredit)} in", style = MaterialTheme.typography.bodySmall)
                             if (showSummaryDetails) {
                                 AlertDialog(onDismissRequest = { showSummaryDetails = false }, title = { Text("How totals work") },
                                     text = { Text("Money in and out cover the selected month. They exclude self transfers, card repayments, failed or unconfirmed payments, and reversed originals.\n\nYour spending counts your share of money out. Paid for others is the remaining share. Still owed includes unpaid amounts across all dates.\n\nToday shows eligible payments for today.") },
@@ -316,11 +314,24 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     }
                 }
                 if (destination == "Overview") item {
-                    if (!captureEnabled) TextButton(onClick = { settings = true; settingsSection = "SMS & messages" }) { Text("SMS capture is off · Set up") }
-                    if (notifications && !notificationAvailable) Text("Notifications are blocked. Enable them in Settings.", style = MaterialTheme.typography.bodySmall)
+                    snapshot?.let {
+                        Card(Modifier.fillMaxWidth()) { Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Column {
+                                Text("Still owed to you", style = MaterialTheme.typography.titleSmall)
+                                Text("All dates · repayments tracked", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(money(it.outstandingRepayments), style = MaterialTheme.typography.titleMedium)
+                        } }
+                    }
                     if (repository.preferences.getBoolean("capture_error", false)) Text("A message could not be recorded. Add it manually if needed.", color = MaterialTheme.colorScheme.error)
-                    if (reviewAvailable) OutlinedButton(onClick = { destination = "Review"; offset = 0; snapshot = null },
-                        modifier = Modifier.semantics { contentDescription = "Open review queue" }) { Text("Review $reviewCount") }
+                    if (reviewAvailable) Card(Modifier.fillMaxWidth().clickable { destination = "Review"; offset = 0; snapshot = null }
+                        .semantics { contentDescription = "Open review queue" }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("$reviewCount payment${if (reviewCount == 1) "" else "s"} needs review →", style = MaterialTheme.typography.titleSmall)
+                            Text("Excluded from totals until confirmed", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
                 if (destination == "Overview") item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -354,6 +365,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                             Column(Modifier.weight(1f)) { Text("Results · money in", style = MaterialTheme.typography.labelSmall); Text(money(it.resultCredit), style = MaterialTheme.typography.titleSmall) }
                         } }
                         Text("Result totals are separate from Overview.", style = MaterialTheme.typography.bodySmall)
+                        if (filter != "All") Text("Filters apply to these results only. Overview totals cover the whole month; still owed covers all dates.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 if (destination == "Review") item {
@@ -361,30 +373,28 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     Text("Review queue", style = MaterialTheme.typography.titleLarge)
                     Text("Check uncertain details before a payment enters your totals.", style = MaterialTheme.typography.bodySmall)
                 }
-                if (destination == "Transactions") item {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    FilterChip(selected = filter == "All", onClick = {
-                        if (filter != "All" || offset != 0) { filter = "All"; offset = 0; snapshot = null }
-                    }, label = { Text("All") })
-                }
-                if (filter != "All") Text("Filters apply to results only. Overview totals cover the whole month; still owed covers all dates.", style = MaterialTheme.typography.bodySmall)
-                }
                 val rows = if (destination == "Overview") snapshot?.rows.orEmpty().take(4) else snapshot?.rows.orEmpty()
                 if (loading) item { Text("Loading transactions…") }
                 else if (rows.isEmpty()) item { Text(if (destination == "Review") "You’re all caught up. No saved transactions need review." else if (destination == "Transactions" && (filter != "All" || search.isNotBlank())) "No transactions match these filters in this month. Change or clear the filters." else "No transactions here yet. Add one manually or enable new SMS capture in Settings.") }
                 rows.groupBy { Instant.ofEpochMilli(it.effectiveTimestamp).atZone(ZoneId.systemDefault()).toLocalDate() }.forEach { (day, rows) ->
                     item("day-$day") { Text(day.format(DateTimeFormatter.ofPattern("d MMM yyyy")), style = MaterialTheme.typography.labelLarge) }
                     items(rows, key = { it.id }) { row ->
-                        Card(Modifier.fillMaxWidth().clickable { selected = row; selectedId = row.id }) {
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column(Modifier.fillMaxWidth().clickable { selected = row; selectedId = row.id }.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text(row.counterpartyLabel ?: if (row.sourceType == "Manual") "Manual transaction" else "${friendly(row.channel)} transaction",
                                         style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                                     Text(money(row.amountMinor), style = MaterialTheme.typography.titleMedium)
                                 }
-                                Text(friendly(row.direction), style = MaterialTheme.typography.bodySmall)
-                                transactionLabels(row)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                                TextButton(onClick = { selected = row; selectedId = row.id; quickForm = true; form = true }) { Text("Categorize") }
+                                val namedSource = paymentSources.firstOrNull { it.id == row.paymentSourceId }
+                                Text(buildList {
+                                    add(friendly(row.direction))
+                                    transactionLabels(row)?.let(::add)
+                                    namedSource?.nickname?.let(::add)
+                                }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    Text(DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(row.effectiveTimestamp)), style = MaterialTheme.typography.labelSmall)
+                                    TextButton(onClick = { selected = row; selectedId = row.id; quickForm = true; form = true }) { Text("Categorize") }
+                                }
                                 if (row.ownership == "Group") {
                                     val personal = row.personalShareMinor ?: row.amountMinor ?: 0
                                     val debt = repaymentSummary(row, snapshot?.reversedOriginalIds.orEmpty())
@@ -394,19 +404,19 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                                         Text("$label ${money(owed)}", style = MaterialTheme.typography.bodySmall)
                                     }
                                 }
-                                val namedSource = paymentSources.firstOrNull { it.id == row.paymentSourceId }
-                                namedSource?.let { Text(it.nickname, style = MaterialTheme.typography.bodySmall) }
                                 if (row.paymentSourceId == null && paymentSources.any { it.active && it.channel == row.channel })
                                     Text("Payment source needs selection", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
                                 if (row.reviewState == "NeedsReview" || row.status != "Successful")
                                     Text("${friendly(row.status)} · ${friendly(row.reviewState)}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
                                 else if (row.isUserCorrected) Text("Edited by you", style = MaterialTheme.typography.labelSmall)
-                                Text(DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(row.effectiveTimestamp)), style = MaterialTheme.typography.labelSmall)
-                            }
+                                HorizontalDivider(Modifier.padding(top = 6.dp))
                         }
                     }
                 }
-                if (destination != "Overview") item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (destination != "Review") item("add-transaction") {
+                    Button(onClick = { selected = null; selectedId = null; form = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("+ Add transaction") }
+                }
+                if (destination != "Overview" && (offset > 0 || snapshot?.hasOlder == true)) item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { offset = maxOf(0, offset - 100); snapshot = null }, enabled = !loading && offset > 0) { Text("Newer") }
                     Text("Page ${offset / 100 + 1}", Modifier.padding(top = 12.dp))
                     TextButton(onClick = { offset += 100; snapshot = null }, enabled = !loading && snapshot?.hasOlder == true && offset <= Int.MAX_VALUE - 201) { Text("Older") }

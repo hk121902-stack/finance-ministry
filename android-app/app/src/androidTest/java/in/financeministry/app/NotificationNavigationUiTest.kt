@@ -11,9 +11,13 @@ class NotificationNavigationUiTest {
     @get:Rule val rule = createEmptyComposeRule()
     @Test fun notification_actions_target_correct_records_and_do_not_replay_after_recreation() {
         val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<FinanceMinistryApp>()
+        val repository = app.container.repository
+        val onboardingComplete = repository.preferences.getBoolean("onboarding_complete", false)
+        // This test exercises a returning user's notification path. Fresh-install onboarding
+        // is verified separately by AppLaunchSmokeTest.
+        repository.preferences.edit().putBoolean("onboarding_complete", true).commit()
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().startActivitySync(
             android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-        val repository = app.container.repository
         val manager = app.getSystemService(android.app.NotificationManager::class.java)
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
             .grantRuntimePermission(app.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
@@ -65,16 +69,17 @@ class NotificationNavigationUiTest {
                     .filterIsInstance<MainActivity>().single().recreate()
             }
             rule.waitForIdle()
-            rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
+            rule.onNodeWithContentDescription("Open overview").assertIsDisplayed()
             view.send()
             rule.waitUntil(15000) { rule.onAllNodesWithText("₹700.02").fetchSemanticsNodes().isNotEmpty() }
             rule.onNodeWithText("Edit / confirm").assertIsDisplayed()
             runBlocking { repository.delete(second) }
             view.send()
             rule.waitUntil(15000) { rule.onAllNodesWithText("This transaction no longer exists.").fetchSemanticsNodes().isNotEmpty() }
-            rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
+            rule.onNodeWithContentDescription("Open overview").assertIsDisplayed()
         } finally {
             runBlocking { repository.delete(first); repository.delete(second) }
+            repository.preferences.edit().putBoolean("onboarding_complete", onboardingComplete).commit()
             // PendingIntent delivery can create another activity task. Finish test-owned
             // MainActivity instances before ActivityScenario performs its teardown.
             androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().runOnMainSync {

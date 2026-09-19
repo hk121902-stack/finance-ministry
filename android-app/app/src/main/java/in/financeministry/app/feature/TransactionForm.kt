@@ -46,7 +46,8 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     var repaid by rememberSaveable(existing?.id) { mutableStateOf(existing?.repaidMinor?.takeIf { it > 0 }?.let { BigDecimal.valueOf(it, 2).toPlainString() } ?: "") }
     var sourceId by rememberSaveable(existing?.id) { mutableStateOf(existing?.paymentSourceId) }
     var sources by remember { mutableStateOf<List<PaymentSourceEntity>>(emptyList()) }
-    var optional by rememberSaveable { mutableStateOf(false) }
+    var detailsExpanded by rememberSaveable(existing?.id, quickOnly) { mutableStateOf(existing != null && !quickOnly) }
+    var optional by rememberSaveable(existing?.id, quickOnly) { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -76,7 +77,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
             }
         }
         if (direction == "Unknown") Text("Choose money out, money in, or transfer.", color = MaterialTheme.colorScheme.error)
-        OutlinedTextField(label, { label = it.take(60) }, label = { Text("Label (optional)") }, supportingText = { Text("A short description, not personal or account details.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(label, { label = it.take(60) }, label = { Text("Merchant or short label (optional)") }, supportingText = { Text("A short description, not personal or account details.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }
         Choice("Category", category, transactionCategories) { category = it }
         Text("Who was this payment for?", style = MaterialTheme.typography.labelLarge)
@@ -90,6 +91,12 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
                 }, label = { Text(friendly(option)) })
             }
         }
+        Text(when (ownership) {
+            "Group" -> "Only your share counts as your spending. The remainder is owed by others."
+            "ForOther" -> "This payment is tracked separately from your own spending."
+            "SelfTransfer" -> "Transfers are excluded from spending totals."
+            else -> "Full amount counts as your spending."
+        }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (ownership == "Group") {
             OutlinedTextField(groupLabel, { groupLabel = it.take(40) }, label = { Text("Group name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(personalShare, { personalShare = it }, label = { Text("Your share (INR)") }, supportingText = { Text("The rest is tracked as money others owe you.") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
@@ -99,6 +106,9 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         }
         if (compact) TextButton(onClick = { compact = false }) { Text("Edit all details") }
         if (!compact) {
+        if (!detailsExpanded) {
+            TextButton(onClick = { detailsExpanded = true }) { Text("More details · date, source and notes") }
+        } else {
         val selectedDate = LocalDateTime.parse(date, formatter)
         TextButton(onClick = {
             android.app.DatePickerDialog(context, pickerTheme, { _, year, month, day ->
@@ -128,6 +138,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
             OutlinedTextField(hint, { hint = it }, label = { Text("Account last 4 digits (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(notes, { notes = it.take(200) }, label = { Text("Notes (optional)") }, modifier = Modifier.fillMaxWidth())
             Text("Use short labels and notes. Do not paste SMS, OTPs, personal contact names, UPI IDs or full account numbers. Text stays encrypted on this device.", style = MaterialTheme.typography.bodySmall)
+        }
         }
         }
       }

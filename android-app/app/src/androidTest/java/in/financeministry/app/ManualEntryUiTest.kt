@@ -49,4 +49,10 @@ class ManualEntryUiTest {
             runBlocking { repository.snapshot().rows.filter { it.id !in before }.forEach { repository.delete(it.id) } }
         }
     }
+
+    @Test fun manual_form_keeps_date_source_and_notes_in_more_details() {
+        rule.onNodeWithText("+ Add transaction").performClick()
+        rule.onNodeWithText("More details · date, source and notes").assertIsDisplayed()
+        rule.onAllNodes(hasText("Date:", substring = true)).assertCountEquals(0)
+    }
 }
