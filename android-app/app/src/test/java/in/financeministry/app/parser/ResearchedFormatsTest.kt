@@ -11,7 +11,7 @@ import org.junit.runners.Parameterized
 class ResearchedFormatsTest(private val label: String, private val body: String,
     private val decision: ParseDecision, private val amount: Long?, private val direction: Direction) {
     @Test fun expected_transaction_semantics() {
-        val actual = RuleBasedFinancialSmsParser().parse(IncomingSms("TEST", 0, body))
+        val actual = `in`.financeministry.app.parser.engine.TemplateEngineParser().parse(IncomingSms("TEST", 0, body))
         assertEquals(label, decision, actual.decision)
         assertEquals(label, amount, actual.amountMinor)
         assertEquals(label, direction, actual.direction)

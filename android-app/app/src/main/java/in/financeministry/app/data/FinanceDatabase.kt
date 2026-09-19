@@ -60,6 +60,8 @@ data class ImportBatchEntity(@PrimaryKey val id: String, val createdAt: Long, va
 data class CorrectionEntity(@PrimaryKey val id: String, val transactionId: String, val correctedAt: Long,
     val fieldName: String, val previousValue: String?, val newValue: String?)
 
+data class CategoryBalance(val category: String, val balanceMinor: Long)
+
 @Dao
 interface TransactionDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE) fun insert(row: TransactionEntity): Long
@@ -70,8 +72,8 @@ interface TransactionDao {
     @Query("SELECT COUNT(*) FROM transactions WHERE reviewState = 'NeedsReview'") suspend fun reviewCount(): Int
     @Query("SELECT * FROM transactions WHERE reviewState = 'NeedsReview' ORDER BY effectiveTimestamp DESC, id DESC LIMIT :limit OFFSET :offset")
     fun reviewPage(limit: Int, offset: Int): List<TransactionEntity>
-    @Query("SELECT * FROM transactions WHERE effectiveTimestamp >= :start AND effectiveTimestamp < :end AND (:reviewOnly = 0 OR reviewState = 'NeedsReview') AND (:direction = 'All' OR direction = :direction) AND (:purpose = 'All' OR (:purpose = 'Personal' AND ownership = 'Personal') OR (:purpose = 'ForOthers' AND ownership = 'ForOther') OR (:purpose = 'Group' AND ownership = 'Group') OR (:purpose = 'SelfTransfer' AND (ownership = 'SelfTransfer' OR transactionType = 'SelfTransfer'))) AND (:origin = 'All' OR (:origin = 'Manual' AND sourceType = 'Manual') OR (:origin = 'Edited' AND isUserCorrected = 1)) ORDER BY effectiveTimestamp DESC, id DESC LIMIT :limit OFFSET :offset")
-    fun page(purpose: String, origin: String, direction: String, reviewOnly: Boolean, start: Long, end: Long, limit: Int, offset: Int): List<TransactionEntity>
+    @Query("SELECT * FROM transactions WHERE effectiveTimestamp >= :start AND effectiveTimestamp < :end AND (:reviewOnly = 0 OR reviewState = 'NeedsReview') AND (:direction = 'All' OR direction = :direction) AND (:purpose = 'All' OR (:purpose = 'Personal' AND ownership = 'Personal') OR (:purpose = 'ForOthers' AND ownership = 'ForOther') OR (:purpose = 'Group' AND ownership = 'Group') OR (:purpose = 'SelfTransfer' AND (ownership = 'SelfTransfer' OR transactionType = 'SelfTransfer'))) AND (:origin = 'All' OR (:origin = 'Manual' AND sourceType = 'Manual') OR (:origin = 'Edited' AND isUserCorrected = 1)) AND (:sourceKind = 'All' OR paymentSourceId IN (SELECT id FROM payment_sources WHERE kind = :sourceKind)) ORDER BY effectiveTimestamp DESC, id DESC LIMIT :limit OFFSET :offset")
+    fun page(purpose: String, origin: String, direction: String, reviewOnly: Boolean, sourceKind: String, start: Long, end: Long, limit: Int, offset: Int): List<TransactionEntity>
     @Query("SELECT * FROM transactions WHERE id = :id") fun get(id: String): TransactionEntity?
     @Query("SELECT EXISTS(SELECT 1 FROM transactions WHERE sourceFingerprint = :fingerprint)") fun hasFingerprint(fingerprint: ByteArray): Boolean
     @Insert fun insertBatch(batch: ImportBatchEntity)
@@ -93,6 +95,9 @@ interface TransactionDao {
     @Query("SELECT * FROM payment_sources WHERE id = :id") fun source(id: String): PaymentSourceEntity?
     @Query("SELECT COUNT(*) FROM transactions WHERE paymentSourceId = :id") fun sourceUsageCount(id: String): Int
     @Query("UPDATE payment_sources SET active = 0 WHERE id = :id") fun retireSource(id: String)
+
+    @Query("SELECT s.kind AS category, SUM(CASE WHEN t.direction = 'Credit' THEN t.amountMinor ELSE -t.amountMinor END) AS balanceMinor FROM transactions t JOIN payment_sources s ON t.paymentSourceId = s.id WHERE t.status = 'Successful' AND t.reviewState != 'NeedsReview' AND t.paymentSourceId IS NOT NULL AND s.active = 1 GROUP BY s.kind")
+    fun categoryBalances(): List<CategoryBalance>
 }
 
 @Database(entities = [TransactionEntity::class, CorrectionEntity::class, ImportBatchEntity::class, PaymentSourceEntity::class], version = 4, exportSchema = true)

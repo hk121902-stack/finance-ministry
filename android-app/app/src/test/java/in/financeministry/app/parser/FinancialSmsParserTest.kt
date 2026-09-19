@@ -12,7 +12,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class FinancialSmsParserTest {
-    private val parser = RuleBasedFinancialSmsParser()
+    private val parser = `in`.financeministry.app.parser.engine.TemplateEngineParser()
 
     @Test
     fun otp_is_rejected_even_with_amount() {

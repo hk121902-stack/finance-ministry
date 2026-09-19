@@ -10,7 +10,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
@@ -80,7 +79,6 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var selectedMonth by rememberSaveable { mutableStateOf(java.time.YearMonth.now().toString()) }
     var showGuide by remember { mutableStateOf(!repository.preferences.getBoolean("onboarding_complete", false)) }
     var paymentSources by remember { mutableStateOf(emptyList<PaymentSourceEntity>()) }
-    var sourceKindFilter by rememberSaveable { mutableStateOf("All") }
     var showSummaryDetails by rememberSaveable { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
     var showSourcePicker by remember { mutableStateOf(false) }
@@ -108,18 +106,17 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
             catch (_: Exception) { error = "Cannot open this transaction."; selectedId = null; form = false }
         }
     }
-    LaunchedEffect(revision, offset, filter, refreshGeneration, selectedMonth, sourceKindFilter) {
+    LaunchedEffect(revision, offset, filter, refreshGeneration, selectedMonth) {
         loading = true
         try {
-            val monthSummary = repository.snapshot(0, "All", "All", java.time.YearMonth.parse(selectedMonth).atDay(1), LocalDate.now())
+            val monthSummary = repository.snapshot(0, "All", java.time.YearMonth.parse(selectedMonth).atDay(1), LocalDate.now())
             val result = if (filter == "Review") repository.reviewQueue(offset).copy(
                 debit = monthSummary.debit, credit = monthSummary.credit,
                 dailyDebit = monthSummary.dailyDebit, dailyCredit = monthSummary.dailyCredit,
                 personalSpend = monthSummary.personalSpend, paidForOthers = monthSummary.paidForOthers,
                 outstandingRepayments = monthSummary.outstandingRepayments,
-                selectedMonth = monthSummary.selectedMonth,
-                categoryBalances = monthSummary.categoryBalances)
-                else repository.snapshot(offset, filter, sourceKindFilter, java.time.YearMonth.parse(selectedMonth).atDay(1), LocalDate.now())
+                selectedMonth = monthSummary.selectedMonth)
+                else repository.snapshot(offset, filter, java.time.YearMonth.parse(selectedMonth).atDay(1), LocalDate.now())
             snapshot = result
             paymentSources = repository.paymentSources()
             reviewCount = repository.reviewCount()
@@ -134,7 +131,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
             if (form && dirtyForm) reviewWarning = true
             else {
                 settings = false; settingsSection = null; selected = null; selectedId = null; form = false
-                filter = "Review"; sourceKindFilter = "All"; offset = 0; snapshot = null
+                filter = "Review"; offset = 0; snapshot = null
             }
         }
     }
@@ -284,20 +281,6 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                                     confirmButton = { TextButton(onClick = { showSummaryDetails = false }) { Text("Got it") } })
                             }
                         } }
-                    }
-                }
-                item {
-                    snapshot?.categoryBalances?.takeIf { it.isNotEmpty() }?.let { balances ->
-                        LazyRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(balances, key = { it.category }) { balance ->
-                                PaymentCategoryCard(
-                                    category = balance.category,
-                                    balanceMinor = balance.balanceMinor,
-                                    isSelected = sourceKindFilter == balance.category,
-                                    onClick = { sourceKindFilter = if (sourceKindFilter == balance.category) "All" else balance.category; offset = 0; snapshot = null }
-                                )
-                            }
-                        }
                     }
                 }
                 item {
@@ -513,25 +496,6 @@ private fun SettingsRow(title: String, summary: String, onClick: () -> Unit) {
                 Text(summary, style = MaterialTheme.typography.bodySmall)
             }
             Text("›", style = MaterialTheme.typography.titleLarge)
-        }
-    }
-}
-
-@Composable
-fun PaymentCategoryCard(category: String, balanceMinor: Long, isSelected: Boolean, onClick: () -> Unit) {
-    val backgroundColor = if (isSelected) androidx.compose.ui.graphics.Color(0xFFCCFF00) else MaterialTheme.colorScheme.surfaceVariant
-    val contentColor = if (isSelected) androidx.compose.ui.graphics.Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
-    Card(
-        onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = backgroundColor, contentColor = contentColor),
-        modifier = Modifier.width(240.dp).height(140.dp)
-    ) {
-        Column(
-            Modifier.fillMaxSize().padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(friendly(category), style = MaterialTheme.typography.titleMedium, color = contentColor)
-            Text(money(balanceMinor), style = MaterialTheme.typography.headlineMedium, color = contentColor)
         }
     }
 }

@@ -11,7 +11,7 @@ class CardAlertFieldsTest {
             "ALERT: INR 42.50 is spent on your BOBCARD ending 0000 at Upi-TEST SHOP on 01-01-2026. Current outstanding is Rs 700",
             "INR 42.50 spent on YES BANK Card X0000 @TEST SHOP 01-01-2026 12:00:00 pm. Avl Lmt INR 900"
         )) {
-            val result = RuleBasedFinancialSmsParser().parse(IncomingSms("TEST", 0, body))
+            val result = `in`.financeministry.app.parser.engine.TemplateEngineParser().parse(IncomingSms("TEST", 0, body))
             assertEquals(ParseDecision.Record, result.decision)
             assertEquals(Channel.Card, result.channel)
             assertEquals("••••0000", result.maskedAccountHint)
@@ -19,7 +19,7 @@ class CardAlertFieldsTest {
         }
     }
     @Test fun unfamiliar_card_layout_is_reviewable_instead_of_silently_lost() {
-        val result = RuleBasedFinancialSmsParser().parse(IncomingSms("TEST", 0,
+        val result = `in`.financeministry.app.parser.engine.TemplateEngineParser().parse(IncomingSms("TEST", 0,
             "INR 42.50 spent on New Bank Credit Card ending 0000; terminal TEST; Avl Limit INR 900"))
         assertEquals(ParseDecision.NeedsReview, result.decision)
         assertEquals(4250L, result.amountMinor)

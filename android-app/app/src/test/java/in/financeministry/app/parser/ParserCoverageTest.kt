@@ -6,7 +6,7 @@ import org.junit.Test
 
 /** Invented values only. No private SMS, names, references or balances in the repo. */
 class ParserCoverageTest {
-    private fun parse(body: String) = RuleBasedFinancialSmsParser().parse(IncomingSms("TEST", 0L, body))
+    private fun parse(body: String) = `in`.financeministry.app.parser.engine.TemplateEngineParser().parse(IncomingSms("TEST", 0L, body))
 
     @Test fun product_names_and_administration_are_not_money_movements() {
         listOf(
