@@ -6,7 +6,7 @@ An Android expense tracker that records transactions from incoming SMS and lets 
 
 **Status: early alpha.** The release channel is for installable **debug APKs** for testing. The app is being developed by one maintainer and is not ready for general use. Parsing can miss or misclassify transactions; check your records. Do not make this your only financial record.
 
-The current debug alpha is [v0.1.0-alpha.10](https://github.com/hk121902-stack/finance-ministry/releases/tag/v0.1.0-alpha.10).
+The current debug alpha is [v0.1.0-alpha.11](https://github.com/hk121902-stack/finance-ministry/releases/tag/v0.1.0-alpha.11).
 Download the debug APK from its assets. The release includes its SHA-256 checksum,
 signing-certificate details, and license notices. Physical-device testing is pending.
 
@@ -17,6 +17,9 @@ signing-certificate details, and license notices. Physical-device testing is pen
 - Keep uncertain detections in **Review**, including transactions whose amount could not be safely extracted.
 - Add manual transactions with money-in/out choices, date/time pickers and optional details.
 - Use separate Home and Settings screens, light/dark themes and unsaved-edit warnings.
+- Use a focused Overview, searchable Transactions and a separate all-dates Review queue.
+- Set an optional on-device home greeting and filter transactions by category, purpose,
+  money flow or origin. Filter-result totals never replace monthly Overview totals.
 - Edit records, keep correction history, delete individual records, or erase all local data.
 - Browse history in 100-record pages, filter manual/review/edited entries, and see daily/monthly debit and credit totals.
 - Extract supported masked account hints and recipient labels; conservatively link full-amount refunds/reversals when strong matching evidence exists.

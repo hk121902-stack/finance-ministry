@@ -17,7 +17,7 @@ enum class TransactionType { MerchantPayment, P2PTransfer, SelfTransfer, CardRep
 enum class SourceType { SMS, Manual }
 enum class ReviewState { AutoRecorded, NeedsReview, Confirmed }
 /** Who ultimately bears this cost. Kept separate from the payment channel and category. */
-enum class SpendingOwnership { Personal, ForOther, Group, SelfTransfer }
+enum class SpendingOwnership { Personal, Family, ForOther, Group, SelfTransfer }
 
 data class ParseAssessment(
     val decision: ParseDecision,

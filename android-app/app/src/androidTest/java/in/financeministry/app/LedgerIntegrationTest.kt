@@ -352,6 +352,56 @@ class LedgerIntegrationTest {
         } finally { repository.eraseAll(); repository.close() }
     }
 
+    @Test fun categories_combine_with_other_filters_before_pagination_without_changing_totals() = runBlocking {
+        val repository = TransactionRepository(context, namespace())
+        try {
+            val flat = repository.save(input().copy(category = "Flat expenses", ownership = SpendingOwnership.Family))
+            val bills = repository.save(input().copy(category = "Bills", ownership = SpendingOwnership.Family))
+            repository.save(input().copy(category = "Bills", direction = Direction.Credit, ownership = SpendingOwnership.Family))
+            repository.save(input().copy(category = "Bills"))
+            repeat(101) { repository.save(input().copy(category = "Food", ownership = SpendingOwnership.Family)) }
+            val all = repository.snapshot()
+            val filtered = repository.snapshot(filter = "Family+Debit+Manual+Category:Flat expenses+Category:Bills")
+            assertEquals(setOf(flat, bills), filtered.rows.map { it.id }.toSet())
+            assertFalse(filtered.hasOlder)
+            assertEquals(all.debit, filtered.debit)
+            assertEquals(all.credit, filtered.credit)
+            assertEquals(all.personalSpend, filtered.personalSpend)
+            assertTrue(repository.snapshot(filter = "Category:Travel").rows.isEmpty())
+            val food = repository.snapshot(filter = "Category:Food")
+            assertEquals(100, food.rows.size)
+            assertTrue(food.hasOlder)
+            val older = repository.snapshot(offset = 100, filter = "Category:Food")
+            assertEquals(1, older.rows.size)
+            assertFalse(older.hasOlder)
+            assertFalse(older.rows.single().id in food.rows.map { it.id })
+        } finally { repository.eraseAll(); repository.close() }
+    }
+
+    @Test fun family_is_filterable_and_counts_as_spending_without_debt() = runBlocking {
+        val repository = TransactionRepository(context, namespace())
+        try {
+            val family = SpendingOwnership.valueOf("Family")
+            val id = repository.save(input().copy(amount = "2000", category = "Health", ownership = family))
+            val other = repository.save(input().copy(amount = "100", ownership = SpendingOwnership.ForOther))
+            repository.classify(other, "Food", family)
+            repository.save(input().copy(amount = "50"))
+            val result = repository.snapshot(filter = "Family+Debit+Manual")
+            assertEquals(setOf(id, other), result.rows.map { it.id }.toSet())
+            assertEquals("215000", result.personalSpend.toString())
+            assertEquals("0", result.paidForOthers.toString())
+            assertEquals("0", result.outstandingRepayments.toString())
+            assertEquals(listOf(other), repository.snapshot(filter = "Family+Edited").rows.map { it.id })
+            assertTrue(repository.snapshot(filter = "Family+Credit").rows.isEmpty())
+            val saved = repository.get(id)!!
+            assertEquals("Health", saved.category)
+            assertEquals("Family", saved.ownership)
+            assertNull(repaymentSummary(saved))
+            repository.close()
+            assertEquals("Family", repository.get(id)!!.ownership)
+        } finally { repository.eraseAll(); repository.close() }
+    }
+
     @Test fun payment_sources_can_be_updated_and_retired_without_breaking_existing_transactions() = runBlocking {
         val repository = TransactionRepository(context, namespace())
         try {

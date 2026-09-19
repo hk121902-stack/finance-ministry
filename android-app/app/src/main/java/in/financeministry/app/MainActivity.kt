@@ -58,8 +58,11 @@ fun FinanceMinistryTheme(content: @Composable () -> Unit) {
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
     val colors = if (dark) androidx.compose.material3.darkColorScheme(
         primary = androidx.compose.ui.graphics.Color(0xFF8AD5CA),
+        onPrimary = androidx.compose.ui.graphics.Color(0xFF10201B),
         background = androidx.compose.ui.graphics.Color(0xFF101817),
         surface = androidx.compose.ui.graphics.Color(0xFF101817),
+        onBackground = androidx.compose.ui.graphics.Color(0xFFE7F0EB),
+        onSurface = androidx.compose.ui.graphics.Color(0xFFE7F0EB),
         surfaceVariant = androidx.compose.ui.graphics.Color(0xFF263C38),
         surfaceContainerHighest = androidx.compose.ui.graphics.Color(0xFF263C38),
         secondaryContainer = androidx.compose.ui.graphics.Color(0xFF224D45)

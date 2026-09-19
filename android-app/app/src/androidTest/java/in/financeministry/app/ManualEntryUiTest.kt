@@ -40,8 +40,9 @@ class ManualEntryUiTest {
                 throw AssertionError("Save did not finish. UI state: ${rule.onRoot().printToString()}", failure)
             }
             rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
-            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("₹512.34"))
-            rule.onNodeWithText("₹512.34").assertIsDisplayed()
+            val savedRow = hasText("₹512.34") and hasClickAction()
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(savedRow)
+            rule.onNode(savedRow).assertIsDisplayed()
             val saved = runBlocking { repository.snapshot().rows.single { it.id !in before && it.amountMinor == 51234L } }
             assertEquals("Debit", saved.direction)
         } finally {

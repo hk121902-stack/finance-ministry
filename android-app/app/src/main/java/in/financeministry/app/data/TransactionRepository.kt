@@ -23,7 +23,9 @@ data class LedgerSnapshot(val rows: List<TransactionEntity>, val debit: BigInteg
     val hasOlder: Boolean = false, val personalSpend: BigInteger = BigInteger.ZERO,
     val paidForOthers: BigInteger = BigInteger.ZERO, val outstandingRepayments: BigInteger = BigInteger.ZERO,
     val selectedMonth: LocalDate = LocalDate.now().withDayOfMonth(1),
-    val reversedOriginalIds: Set<String> = emptySet())
+    val reversedOriginalIds: Set<String> = emptySet(),
+    val resultCount: Long = 0, val resultDebit: BigInteger = BigInteger.ZERO,
+    val resultCredit: BigInteger = BigInteger.ZERO)
 
 /** All mutation, capture and erasure share one gate. No raw source is stored. */
 class TransactionRepository(private val context: Context, private val namespace: String = "finance") {
@@ -41,14 +43,16 @@ class TransactionRepository(private val context: Context, private val namespace:
     private suspend fun <T> locked(block: suspend () -> T): T = withContext(Dispatchers.IO) { mutex.withLock { block() } }
 
     suspend fun snapshot(offset: Int = 0, filter: String = "All", today: LocalDate = LocalDate.now(),
-        currentDay: LocalDate = today): LedgerSnapshot = locked {
+        currentDay: LocalDate = today, search: String = ""): LedgerSnapshot = locked {
         require(offset >= 0 && offset <= Int.MAX_VALUE - 101)
         val filterParts = filter.split("+")
-        val purpose = filterParts.firstOrNull { it in listOf("Personal", "ForOthers", "Group", "SelfTransfer") } ?: "All"
+        val purpose = filterParts.firstOrNull { it in listOf("Personal", "Family", "ForOthers", "Group", "SelfTransfer") } ?: "All"
         val origin = filterParts.firstOrNull { it in listOf("Manual", "Edited") } ?: "All"
         val direction = filterParts.firstOrNull { it in listOf("Debit", "Credit") } ?: "All"
+        val categories = filterParts.filter { it.startsWith("Category:") }.map { it.removePrefix("Category:") }.distinct()
         require(filter == "All" || filter == "Review" || filterParts.all {
-            it in listOf("Manual", "Edited", "Personal", "ForOthers", "Group", "SelfTransfer", "Debit", "Credit")
+            it in listOf("Manual", "Edited", "Personal", "Family", "ForOthers", "Group", "SelfTransfer", "Debit", "Credit") ||
+                (it.startsWith("Category:") && it.removePrefix("Category:") in transactionCategories)
         })
         if (database == null && !context.getDatabasePath(dbName).exists()) return@locked LedgerSnapshot(emptyList(), BigInteger.ZERO, BigInteger.ZERO)
         val zone = ZoneId.systemDefault()
@@ -64,7 +68,11 @@ class TransactionRepository(private val context: Context, private val namespace:
             .fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf(row.amountMinor ?: 0) }
         val monthStart = month.atStartOfDay(zone).toInstant().toEpochMilli()
         val monthEnd = month.plusMonths(1).atStartOfDay(zone).toInstant().toEpochMilli()
-        val page = db().transactions().page(purpose, origin, direction, filter == "Review", monthStart, monthEnd, 101, offset)
+        val normalizedSearch = search.trim().take(80)
+        val page = db().transactions().page(purpose, origin, direction, filter == "Review", monthStart, monthEnd, 101, offset,
+            categories.isEmpty(), categories, normalizedSearch)
+        val resultTotals = db().transactions().filteredTotals(purpose, origin, direction, filter == "Review", monthStart, monthEnd,
+            categories.isEmpty(), categories, normalizedSearch)
         fun personal(row: TransactionEntity): Long = row.personalShareMinor ?: row.amountMinor ?: 0
         fun owed(row: TransactionEntity): Long = ((row.amountMinor ?: 0) - personal(row) - row.repaidMinor).coerceAtLeast(0)
         val eligibleDebits = rows.filter { eligible(it) && it.direction == Direction.Debit.name }
@@ -73,7 +81,8 @@ class TransactionRepository(private val context: Context, private val namespace:
             eligibleDebits.fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf(personal(row)) },
             eligibleDebits.filter { it.ownership in listOf("ForOther", "Group") }.fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf((row.amountMinor ?: 0) - personal(row)) },
             db().transactions().repaymentCandidates().filter { eligible(it) && it.direction == Direction.Debit.name }
-                .fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf(owed(row)) }, month, reversedOriginals)
+                .fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf(owed(row)) }, month, reversedOriginals,
+            resultTotals.count, BigInteger.valueOf(resultTotals.debit), BigInteger.valueOf(resultTotals.credit))
     }
 
     suspend fun reviewCount(): Int = locked {

@@ -37,9 +37,21 @@ class NotificationNavigationUiTest {
             rule.waitUntil(15000) { runBlocking { repository.get(first)?.category == "Food" } }
             org.junit.Assert.assertEquals("ForOther", runBlocking { repository.get(first)!!.ownership })
             org.junit.Assert.assertEquals(70001L, runBlocking { repository.get(first)!!.amountMinor })
+            classify.send()
+            rule.waitUntil(15000) { rule.onAllNodesWithText("Categorize transaction").fetchSemanticsNodes().isNotEmpty() }
+            rule.onNodeWithText("Family").performClick()
+            rule.onNodeWithText("Category: Food").performClick()
+            rule.onNodeWithText("Flat expenses").performClick()
+            rule.onNodeWithText("Save transaction").performClick()
+            rule.waitUntil(15000) { runBlocking { repository.get(first)?.ownership == "Family" } }
+            val family = runBlocking { repository.get(first)!! }
+            org.junit.Assert.assertEquals("Flat expenses", family.category)
+            org.junit.Assert.assertEquals(70001L, family.personalShareMinor)
+            org.junit.Assert.assertNull(repaymentSummary(family))
             edit.send()
             rule.waitUntil(15000) { rule.onAllNodesWithText("Edit / confirm transaction").fetchSemanticsNodes().isNotEmpty() }
             rule.onNodeWithText("700.01").assertExists()
+            rule.onNodeWithText("Category: Flat expenses").assertExists()
             rule.onNodeWithText("Amount (INR)").performTextReplacement("701.01")
             view.send()
             rule.waitUntil(15000) { rule.onAllNodesWithText("Open another transaction?").fetchSemanticsNodes().isNotEmpty() }

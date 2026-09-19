@@ -7,6 +7,13 @@ import org.junit.Test
 
 class ManualInputTest {
     private fun input(amount: String) = ManualInput(amount, Direction.Debit, 1700000000000, TransactionType.Other)
+    @Test fun family_bears_the_full_cost_without_repayment_tracking() {
+        val family = input("2000").copy(ownership = SpendingOwnership.valueOf("Family"),
+            personalShare = "100", repaid = "500")
+        family.validate()
+        assertEquals(200000L, family.personalShareMinor())
+        assertEquals(0L, family.repaidMinor())
+    }
     @Test fun exact_minor_units() { assertEquals(25050L, input("250.50").amountMinor()); input("1").validate() }
     @Test fun rejects_invalid_amounts() {
         listOf("", "-1", "0", "1.234", "NaN", "92233720368547759", "1e4", "1,000").forEach {

@@ -78,10 +78,10 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         if (direction == "Unknown") Text("Choose money out, money in, or transfer.", color = MaterialTheme.colorScheme.error)
         OutlinedTextField(label, { label = it.take(60) }, label = { Text("Label (optional)") }, supportingText = { Text("A short description, not personal or account details.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }
-        Choice("Category", category, listOf("Other", "Food", "Travel", "Shopping", "Bills", "Health", "Education", "Entertainment", "Cash")) { category = it }
+        Choice("Category", category, transactionCategories) { category = it }
         Text("Who was this payment for?", style = MaterialTheme.typography.labelLarge)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Personal", "ForOther", "Group", "SelfTransfer").forEach { option ->
+            listOf("Personal", "Family", "ForOther", "Group", "SelfTransfer").forEach { option ->
                 FilterChip(selected = ownership == option, onClick = {
                     ownership = option
                     type = if (option == "SelfTransfer") "SelfTransfer" else if (type == "SelfTransfer") "Other" else type

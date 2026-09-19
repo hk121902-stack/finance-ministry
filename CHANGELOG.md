@@ -4,6 +4,22 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.1.0-alpha.11
+
+- Redesign the ledger around three focused destinations: **Overview** for the
+  selected month, **Transactions** for search and filters, and an all-dates
+  **Review** queue for uncertain records.
+- Add transaction search plus clearly scoped Money out and Money in subtotals
+  for the current result set. These do not change the Overview's monthly totals.
+- Add an optional on-device preferred name for the short home greeting.
+- Make category/purpose updates available directly from transaction rows while
+  preserving an uncertain record's review state.
+- Add multi-select category filters combined with money flow, purpose and origin.
+  Filters narrow transactions without changing the whole-month dashboard totals.
+- Add Flat expenses as a transaction category, separate from payment purpose.
+- Add Family as a payment purpose and transaction filter. Family expenses count
+  toward your spending and do not create repayment balances.
+
 ## 0.1.0-alpha.10
 
 - Add Money out and Money in transaction filters. They work together with the

@@ -60,6 +60,9 @@ data class ImportBatchEntity(@PrimaryKey val id: String, val createdAt: Long, va
 data class CorrectionEntity(@PrimaryKey val id: String, val transactionId: String, val correctedAt: Long,
     val fieldName: String, val previousValue: String?, val newValue: String?)
 
+/** A result-set subtotal. This is deliberately separate from the monthly ledger totals. */
+data class TransactionResultTotals(val count: Long, val debit: Long, val credit: Long)
+
 @Dao
 interface TransactionDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE) fun insert(row: TransactionEntity): Long
@@ -70,8 +73,10 @@ interface TransactionDao {
     @Query("SELECT COUNT(*) FROM transactions WHERE reviewState = 'NeedsReview'") suspend fun reviewCount(): Int
     @Query("SELECT * FROM transactions WHERE reviewState = 'NeedsReview' ORDER BY effectiveTimestamp DESC, id DESC LIMIT :limit OFFSET :offset")
     fun reviewPage(limit: Int, offset: Int): List<TransactionEntity>
-    @Query("SELECT * FROM transactions WHERE effectiveTimestamp >= :start AND effectiveTimestamp < :end AND (:reviewOnly = 0 OR reviewState = 'NeedsReview') AND (:direction = 'All' OR direction = :direction) AND (:purpose = 'All' OR (:purpose = 'Personal' AND ownership = 'Personal') OR (:purpose = 'ForOthers' AND ownership = 'ForOther') OR (:purpose = 'Group' AND ownership = 'Group') OR (:purpose = 'SelfTransfer' AND (ownership = 'SelfTransfer' OR transactionType = 'SelfTransfer'))) AND (:origin = 'All' OR (:origin = 'Manual' AND sourceType = 'Manual') OR (:origin = 'Edited' AND isUserCorrected = 1)) ORDER BY effectiveTimestamp DESC, id DESC LIMIT :limit OFFSET :offset")
-    fun page(purpose: String, origin: String, direction: String, reviewOnly: Boolean, start: Long, end: Long, limit: Int, offset: Int): List<TransactionEntity>
+    @Query("SELECT * FROM transactions WHERE effectiveTimestamp >= :start AND effectiveTimestamp < :end AND (:reviewOnly = 0 OR reviewState = 'NeedsReview') AND (:direction = 'All' OR direction = :direction) AND (:purpose = 'All' OR (:purpose = 'Personal' AND ownership = 'Personal') OR (:purpose = 'Family' AND ownership = 'Family') OR (:purpose = 'ForOthers' AND ownership = 'ForOther') OR (:purpose = 'Group' AND ownership = 'Group') OR (:purpose = 'SelfTransfer' AND (ownership = 'SelfTransfer' OR transactionType = 'SelfTransfer'))) AND (:origin = 'All' OR (:origin = 'Manual' AND sourceType = 'Manual') OR (:origin = 'Edited' AND isUserCorrected = 1)) AND (:allCategories = 1 OR category IN (:categories)) AND (:search = '' OR LOWER(COALESCE(counterpartyLabel, '')) LIKE '%' || LOWER(:search) || '%' OR LOWER(COALESCE(userNotes, '')) LIKE '%' || LOWER(:search) || '%') ORDER BY effectiveTimestamp DESC, id DESC LIMIT :limit OFFSET :offset")
+    fun page(purpose: String, origin: String, direction: String, reviewOnly: Boolean, start: Long, end: Long, limit: Int, offset: Int, allCategories: Boolean, categories: List<String>, search: String): List<TransactionEntity>
+    @Query("SELECT COUNT(*) AS count, COALESCE(SUM(CASE WHEN direction = 'Debit' THEN COALESCE(amountMinor, 0) ELSE 0 END), 0) AS debit, COALESCE(SUM(CASE WHEN direction = 'Credit' THEN COALESCE(amountMinor, 0) ELSE 0 END), 0) AS credit FROM transactions WHERE effectiveTimestamp >= :start AND effectiveTimestamp < :end AND (:reviewOnly = 0 OR reviewState = 'NeedsReview') AND (:direction = 'All' OR direction = :direction) AND (:purpose = 'All' OR (:purpose = 'Personal' AND ownership = 'Personal') OR (:purpose = 'Family' AND ownership = 'Family') OR (:purpose = 'ForOthers' AND ownership = 'ForOther') OR (:purpose = 'Group' AND ownership = 'Group') OR (:purpose = 'SelfTransfer' AND (ownership = 'SelfTransfer' OR transactionType = 'SelfTransfer'))) AND (:origin = 'All' OR (:origin = 'Manual' AND sourceType = 'Manual') OR (:origin = 'Edited' AND isUserCorrected = 1)) AND (:allCategories = 1 OR category IN (:categories)) AND (:search = '' OR LOWER(COALESCE(counterpartyLabel, '')) LIKE '%' || LOWER(:search) || '%' OR LOWER(COALESCE(userNotes, '')) LIKE '%' || LOWER(:search) || '%')")
+    fun filteredTotals(purpose: String, origin: String, direction: String, reviewOnly: Boolean, start: Long, end: Long, allCategories: Boolean, categories: List<String>, search: String): TransactionResultTotals
     @Query("SELECT * FROM transactions WHERE id = :id") fun get(id: String): TransactionEntity?
     @Query("SELECT EXISTS(SELECT 1 FROM transactions WHERE sourceFingerprint = :fingerprint)") fun hasFingerprint(fingerprint: ByteArray): Boolean
     @Insert fun insertBatch(batch: ImportBatchEntity)

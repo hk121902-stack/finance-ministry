@@ -42,7 +42,7 @@ data class ManualInput(
     fun normalizedOwnership(): SpendingOwnership =
         if (ownership == SpendingOwnership.SelfTransfer || type == TransactionType.SelfTransfer) SpendingOwnership.SelfTransfer else ownership
     fun personalShareMinor(total: Long = amountMinor()): Long = when (ownership) {
-        SpendingOwnership.Personal, SpendingOwnership.SelfTransfer -> total
+        SpendingOwnership.Personal, SpendingOwnership.Family, SpendingOwnership.SelfTransfer -> total
         SpendingOwnership.ForOther -> 0L
         SpendingOwnership.Group -> parseOptionalAmount(personalShare, "Enter your share with up to two decimal places.")
     }
