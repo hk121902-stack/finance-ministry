@@ -50,9 +50,11 @@ class TransactionRepository(private val context: Context, private val namespace:
         val origin = filterParts.firstOrNull { it in listOf("Manual", "Edited") } ?: "All"
         val direction = filterParts.firstOrNull { it in listOf("Debit", "Credit") } ?: "All"
         val categories = filterParts.filter { it.startsWith("Category:") }.map { it.removePrefix("Category:") }.distinct()
+        val sourceIds = filterParts.filter { it.startsWith("Source:") }.map { it.removePrefix("Source:") }.distinct()
         require(filter == "All" || filter == "Review" || filterParts.all {
             it in listOf("Manual", "Edited", "Personal", "Family", "ForOthers", "Group", "SelfTransfer", "Debit", "Credit") ||
-                (it.startsWith("Category:") && it.removePrefix("Category:") in transactionCategories)
+                (it.startsWith("Category:") && it.removePrefix("Category:") in transactionCategories) ||
+                (it.startsWith("Source:") && it.removePrefix("Source:").matches(Regex("[A-Za-z0-9-]{1,80}")))
         })
         if (database == null && !context.getDatabasePath(dbName).exists()) return@locked LedgerSnapshot(emptyList(), BigInteger.ZERO, BigInteger.ZERO)
         val zone = ZoneId.systemDefault()
@@ -70,9 +72,9 @@ class TransactionRepository(private val context: Context, private val namespace:
         val monthEnd = month.plusMonths(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val normalizedSearch = search.trim().take(80)
         val page = db().transactions().page(purpose, origin, direction, filter == "Review", monthStart, monthEnd, 101, offset,
-            categories.isEmpty(), categories, normalizedSearch)
+            categories.isEmpty(), categories, sourceIds.isEmpty(), sourceIds, normalizedSearch)
         val resultTotals = db().transactions().filteredTotals(purpose, origin, direction, filter == "Review", monthStart, monthEnd,
-            categories.isEmpty(), categories, normalizedSearch)
+            categories.isEmpty(), categories, sourceIds.isEmpty(), sourceIds, normalizedSearch)
         fun personal(row: TransactionEntity): Long = row.personalShareMinor ?: row.amountMinor ?: 0
         fun owed(row: TransactionEntity): Long = ((row.amountMinor ?: 0) - personal(row) - row.repaidMinor).coerceAtLeast(0)
         val eligibleDebits = rows.filter { eligible(it) && it.direction == Direction.Debit.name }

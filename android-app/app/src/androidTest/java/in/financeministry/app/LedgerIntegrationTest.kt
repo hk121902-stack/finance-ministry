@@ -97,6 +97,42 @@ class LedgerIntegrationTest {
         } finally { repository.eraseAll(); repository.close() }
     }
 
+    @Test fun transaction_result_totals_use_the_same_eligibility_rules_as_overview() = runBlocking {
+        val name = namespace()
+        val repository = TransactionRepository(context, name)
+        val now = System.currentTimeMillis()
+        try {
+            val db = FinanceDatabase.open(context, DeviceSecrets(context, name).databasePassphrase(false), "$name.db")
+            try {
+                fun row(id: String, amount: Long, direction: String = "Credit", status: String = "Successful",
+                    type: String = "Other", review: String = "Confirmed", ownership: String = "Personal",
+                    linkedOriginalId: String? = null) = TransactionEntity(
+                    id = id, sourceType = "Manual", sourceTimestamp = now, effectiveTimestamp = now,
+                    amountMinor = amount, direction = direction, status = status, channel = "Other",
+                    transactionType = type, reviewState = review, ownership = ownership,
+                    linkedOriginalId = linkedOriginalId, createdAt = now, updatedAt = now)
+
+                listOf(
+                    row("eligible-credit", 1000),
+                    row("eligible-debit", 700, direction = "Debit"),
+                    row("card-repayment", 2000, type = "CardRepayment"),
+                    row("self-transfer", 3000, type = "SelfTransfer", ownership = "SelfTransfer"),
+                    row("needs-review", 4000, review = "NeedsReview"),
+                    row("failed", 5000, status = "Failed"),
+                    row("reversed-original", 6000),
+                    row("reversal", 6000, status = "Reversed", type = "Reversal", linkedOriginalId = "reversed-original")
+                ).forEach { db.transactions().insert(it) }
+            } finally { db.close() }
+
+            val snapshot = repository.snapshot()
+            assertEquals("1000", snapshot.credit.toString())
+            assertEquals("1000", snapshot.resultCredit.toString())
+            assertEquals("700", snapshot.debit.toString())
+            assertEquals("700", snapshot.resultDebit.toString())
+            assertEquals(8, snapshot.resultCount)
+        } finally { repository.eraseAll(); repository.close() }
+    }
+
     @Test fun manual_edit_audit_totals_delete_and_nullable_fingerprints() = runBlocking {
         val name = namespace(); val repository = TransactionRepository(context, name)
         try {
@@ -429,6 +465,29 @@ class LedgerIntegrationTest {
                 repository.save(input().copy(channel = Channel.UPI, paymentSourceId = mismatched.id))
             }
             assertTrue(mismatchFailure.isFailure)
+        } finally { repository.eraseAll(); repository.close() }
+    }
+
+    @Test fun payment_source_filters_support_multiple_sources_and_combine_with_categories() = runBlocking {
+        val repository = TransactionRepository(context, namespace())
+        try {
+            val primary = repository.addPaymentSource("Primary UPI", "UPI", Channel.UPI, "HDFC", "7111")
+            val travel = repository.addPaymentSource("Travel UPI", "UPI", Channel.UPI, "ICICI", "0593")
+            val card = repository.addPaymentSource("Everyday card", "Credit card", Channel.Card, "Kotak", "5990")
+            val primaryId = repository.save(input().copy(amount = "10.00", channel = Channel.UPI,
+                category = "Food", paymentSourceId = primary.id))
+            val travelId = repository.save(input().copy(amount = "20.00", channel = Channel.UPI,
+                category = "Travel", paymentSourceId = travel.id))
+            repository.save(input().copy(amount = "30.00", channel = Channel.Card,
+                category = "Travel", paymentSourceId = card.id))
+
+            val selectedSources = repository.snapshot(filter = "Source:${primary.id}+Source:${travel.id}")
+            assertEquals(setOf(primaryId, travelId), selectedSources.rows.map { it.id }.toSet())
+            assertEquals("3000", selectedSources.resultDebit.toString())
+
+            val combined = repository.snapshot(filter = "Source:${primary.id}+Source:${travel.id}+Category:Travel")
+            assertEquals(listOf(travelId), combined.rows.map { it.id })
+            assertEquals("2000", combined.resultDebit.toString())
         } finally { repository.eraseAll(); repository.close() }
     }
 

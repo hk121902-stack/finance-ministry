@@ -59,24 +59,48 @@ fun FinanceMinistryTheme(content: @Composable () -> Unit) {
     val colors = if (dark) androidx.compose.material3.darkColorScheme(
         primary = androidx.compose.ui.graphics.Color(0xFF8AD5CA),
         onPrimary = androidx.compose.ui.graphics.Color(0xFF10201B),
+        primaryContainer = androidx.compose.ui.graphics.Color(0xFF224D45),
+        onPrimaryContainer = androidx.compose.ui.graphics.Color(0xFFC7F2E8),
         background = androidx.compose.ui.graphics.Color(0xFF101817),
         surface = androidx.compose.ui.graphics.Color(0xFF101817),
         onBackground = androidx.compose.ui.graphics.Color(0xFFE7F0EB),
         onSurface = androidx.compose.ui.graphics.Color(0xFFE7F0EB),
+        onSurfaceVariant = androidx.compose.ui.graphics.Color(0xFFB4C9BF),
         surfaceVariant = androidx.compose.ui.graphics.Color(0xFF263C38),
+        surfaceContainer = androidx.compose.ui.graphics.Color(0xFF182622),
+        surfaceContainerLow = androidx.compose.ui.graphics.Color(0xFF182622),
+        surfaceContainerHigh = androidx.compose.ui.graphics.Color(0xFF263C38),
         surfaceContainerHighest = androidx.compose.ui.graphics.Color(0xFF263C38),
-        secondaryContainer = androidx.compose.ui.graphics.Color(0xFF224D45)
+        secondaryContainer = androidx.compose.ui.graphics.Color(0xFF224D45),
+        tertiaryContainer = androidx.compose.ui.graphics.Color(0xFF392E17),
+        onTertiaryContainer = androidx.compose.ui.graphics.Color(0xFFF4CF82),
+        outlineVariant = androidx.compose.ui.graphics.Color(0xFF3B5149)
     ) else androidx.compose.material3.lightColorScheme(
         primary = androidx.compose.ui.graphics.Color(0xFF176B60),
         onPrimary = androidx.compose.ui.graphics.Color.White,
         primaryContainer = androidx.compose.ui.graphics.Color(0xFFD4EEE6),
+        onPrimaryContainer = androidx.compose.ui.graphics.Color(0xFF0B4F47),
         background = androidx.compose.ui.graphics.Color(0xFFF7F9F6),
         surface = androidx.compose.ui.graphics.Color(0xFFF7F9F6),
+        onSurface = androidx.compose.ui.graphics.Color(0xFF182923),
+        onSurfaceVariant = androidx.compose.ui.graphics.Color(0xFF52635B),
         surfaceVariant = androidx.compose.ui.graphics.Color(0xFFE4EDE7),
+        surfaceContainer = androidx.compose.ui.graphics.Color.White,
+        surfaceContainerLow = androidx.compose.ui.graphics.Color.White,
+        surfaceContainerHigh = androidx.compose.ui.graphics.Color(0xFFEAF1EC),
         surfaceContainerHighest = androidx.compose.ui.graphics.Color(0xFFE4EDE7),
-        secondaryContainer = androidx.compose.ui.graphics.Color(0xFFD4EEE6)
+        secondaryContainer = androidx.compose.ui.graphics.Color(0xFFD4EEE6),
+        tertiaryContainer = androidx.compose.ui.graphics.Color(0xFFFFF2D8),
+        onTertiaryContainer = androidx.compose.ui.graphics.Color(0xFF7A4B00),
+        outlineVariant = androidx.compose.ui.graphics.Color(0xFFDCE5DF)
     )
-    MaterialTheme(colorScheme = colors, content = content)
+    val shapes = androidx.compose.material3.Shapes(
+        small = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+        medium = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        large = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+        extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+    )
+    MaterialTheme(colorScheme = colors, shapes = shapes, content = content)
 }
 
 @Composable

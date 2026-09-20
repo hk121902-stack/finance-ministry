@@ -90,6 +90,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var draftOriginFilter by remember { mutableStateOf("All") }
     var draftDirectionFilter by remember { mutableStateOf("All") }
     var draftCategories by remember { mutableStateOf(emptyList<String>()) }
+    var draftSourceIds by remember { mutableStateOf(emptyList<String>()) }
     var preferredName by remember { mutableStateOf(repository.preferences.getString("preferred_name", "").orEmpty()) }
     var preferredNameDraft by rememberSaveable { mutableStateOf(preferredName) }
     val ledgerListState = rememberLazyListState()
@@ -270,7 +271,9 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     }
                 }
             } else {
-                LazyColumn(Modifier.fillMaxWidth().weight(1f), state = ledgerListState, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyColumn(Modifier.fillMaxWidth().weight(1f), state = ledgerListState,
+                    contentPadding = PaddingValues(bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (destination == "Overview" && showGuide) item {
                     `in`.financeministry.app.feature.FirstUseGuide(captureEnabled, paymentSources.any { it.active },
                         repository.preferences.getBoolean("review_reminder", false),
@@ -282,32 +285,37 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 }
                 if (destination == "Overview") item {
                     snapshot?.let {
-                        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
+                            Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                 TextButton(onClick = { selectedMonth = java.time.YearMonth.parse(selectedMonth).minusMonths(1).toString(); offset = 0; snapshot = null },
                                     modifier = Modifier.semantics { contentDescription = "Previous month" }) { Text("‹") }
                                 Column(Modifier.weight(1f), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
                                     Text(java.time.YearMonth.parse(selectedMonth).format(DateTimeFormatter.ofPattern("MMMM uuuu")), style = MaterialTheme.typography.titleMedium)
-                                    Text("Whole month", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Whole month", style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f))
                                 }
                                 TextButton(onClick = { selectedMonth = java.time.YearMonth.parse(selectedMonth).plusMonths(1).toString(); offset = 0; snapshot = null },
                                     modifier = Modifier.semantics { contentDescription = "Next month" }) { Text("›") }
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                Text("Your spending", style = MaterialTheme.typography.labelMedium)
+                                Text("Your share of spending", style = MaterialTheme.typography.labelMedium)
                                 IconButton(onClick = { showSummaryDetails = true }, modifier = Modifier.semantics { contentDescription = "How totals work" }) { Text("ⓘ") }
                             }
                             Text(money(it.personalSpend), style = MaterialTheme.typography.headlineMedium)
-                            Text("Personal, family and your group share", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            HorizontalDivider()
+                            Text("Personal, family and your share of group spending", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                 Column(Modifier.weight(1f)) { Text("Money out · month", style = MaterialTheme.typography.labelSmall); Text(money(it.debit), style = MaterialTheme.typography.titleSmall) }
                                 Column(Modifier.weight(1f)) { Text("Money in · month", style = MaterialTheme.typography.labelSmall); Text(money(it.credit), style = MaterialTheme.typography.titleSmall) }
                             }
                             if (showSummaryDetails) {
                                 AlertDialog(onDismissRequest = { showSummaryDetails = false }, title = { Text("How totals work") },
-                                    text = { Text("Money in and out cover the selected month. They exclude self transfers, card repayments, failed or unconfirmed payments, and reversed originals.\n\nYour spending counts your share of money out. Paid for others is the remaining share. Still owed includes unpaid amounts across all dates.\n\nToday shows eligible payments for today.") },
+                                    text = { Text("Money in and out cover the selected month. They exclude self transfers, card repayments, failed or unconfirmed payments, and reversed originals.\n\nYour share of spending is money out minus amounts paid for other people or groups that you expect back. Still owed includes unpaid amounts across all dates.\n\nToday shows eligible payments for today.") },
                                     confirmButton = { TextButton(onClick = { showSummaryDetails = false }) { Text("Got it") } })
                             }
                         } }
@@ -315,7 +323,10 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 }
                 if (destination == "Overview") item {
                     snapshot?.let {
-                        Card(Modifier.fillMaxWidth()) { Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                        Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                            Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                             Column {
                                 Text("Still owed to you", style = MaterialTheme.typography.titleSmall)
@@ -326,7 +337,9 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     }
                     if (repository.preferences.getBoolean("capture_error", false)) Text("A message could not be recorded. Add it manually if needed.", color = MaterialTheme.colorScheme.error)
                     if (reviewAvailable) Card(Modifier.fillMaxWidth().clickable { destination = "Review"; offset = 0; snapshot = null }
-                        .semantics { contentDescription = "Open review queue" }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                        .semantics { contentDescription = "Open review queue" }, shape = MaterialTheme.shapes.large,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("$reviewCount payment${if (reviewCount == 1) "" else "s"} needs review →", style = MaterialTheme.typography.titleSmall)
                             Text("Excluded from totals until confirmed", style = MaterialTheme.typography.bodySmall)
@@ -343,7 +356,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text(java.time.YearMonth.parse(selectedMonth).format(DateTimeFormatter.ofPattern("MMMM uuuu")), style = MaterialTheme.typography.titleMedium)
                         TextButton(onClick = {
-                            draftPurposeFilter = purposePart(filter); draftOriginFilter = originPart(filter); draftDirectionFilter = directionPart(filter); draftCategories = categoryParts(filter); showFilters = true
+                            draftPurposeFilter = purposePart(filter); draftOriginFilter = originPart(filter); draftDirectionFilter = directionPart(filter); draftCategories = categoryParts(filter); draftSourceIds = sourceParts(filter); showFilters = true
                         }, modifier = Modifier.semantics { contentDescription = "Filter transactions" }) { Text("Filters") }
                     }
                     OutlinedTextField(search, { search = it.take(80); offset = 0; snapshot = null }, label = { Text("Search transactions") },
@@ -351,8 +364,8 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (filter != "All") {
                             FilterChip(selected = true, onClick = {
-                                draftPurposeFilter = purposePart(filter); draftOriginFilter = originPart(filter); draftDirectionFilter = directionPart(filter); draftCategories = categoryParts(filter); showFilters = true
-                            }, label = { Text(filterLabel(filter)) })
+                                draftPurposeFilter = purposePart(filter); draftOriginFilter = originPart(filter); draftDirectionFilter = directionPart(filter); draftCategories = categoryParts(filter); draftSourceIds = sourceParts(filter); showFilters = true
+                            }, label = { Text(filterLabel(filter, paymentSources)) })
                         }
                         if (search.isNotBlank()) FilterChip(selected = true, onClick = { search = ""; offset = 0; snapshot = null }, label = { Text("Search: $search") })
                         if (filter != "All" || search.isNotBlank()) TextButton(onClick = { filter = "All"; search = ""; offset = 0; snapshot = null },
@@ -361,11 +374,11 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     snapshot?.let {
                         Text("${it.resultCount} matching transaction${if (it.resultCount == 1L) "" else "s"}", style = MaterialTheme.typography.bodySmall)
                         Card(Modifier.fillMaxWidth()) { Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Column(Modifier.weight(1f)) { Text("Results · money out", style = MaterialTheme.typography.labelSmall); Text(money(it.resultDebit), style = MaterialTheme.typography.titleSmall) }
-                            Column(Modifier.weight(1f)) { Text("Results · money in", style = MaterialTheme.typography.labelSmall); Text(money(it.resultCredit), style = MaterialTheme.typography.titleSmall) }
+                            Column(Modifier.weight(1f)) { Text("Money out · results", style = MaterialTheme.typography.labelSmall); Text(money(it.resultDebit), style = MaterialTheme.typography.titleSmall) }
+                            Column(Modifier.weight(1f)) { Text("Money in · results", style = MaterialTheme.typography.labelSmall); Text(money(it.resultCredit), style = MaterialTheme.typography.titleSmall) }
                         } }
-                        Text("Result totals are separate from Overview.", style = MaterialTheme.typography.bodySmall)
-                        if (filter != "All") Text("Filters apply to these results only. Overview totals cover the whole month; still owed covers all dates.", style = MaterialTheme.typography.bodySmall)
+                        Text(if (filter == "All" && search.isBlank()) "Same confirmed-payment rules as Overview."
+                            else "Filtered totals use the same confirmed-payment rules as Overview.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 if (destination == "Review") item {
@@ -379,11 +392,11 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 rows.groupBy { Instant.ofEpochMilli(it.effectiveTimestamp).atZone(ZoneId.systemDefault()).toLocalDate() }.forEach { (day, rows) ->
                     item("day-$day") { Text(day.format(DateTimeFormatter.ofPattern("d MMM yyyy")), style = MaterialTheme.typography.labelLarge) }
                     items(rows, key = { it.id }) { row ->
-                        Column(Modifier.fillMaxWidth().clickable { selected = row; selectedId = row.id }.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column(Modifier.fillMaxWidth().clickable { selected = row; selectedId = row.id }.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text(row.counterpartyLabel ?: if (row.sourceType == "Manual") "Manual transaction" else "${friendly(row.channel)} transaction",
                                         style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                                    Text(money(row.amountMinor), style = MaterialTheme.typography.titleMedium)
+                                    Text(money(row.amountMinor), style = MaterialTheme.typography.titleSmall)
                                 }
                                 val namedSource = paymentSources.firstOrNull { it.id == row.paymentSourceId }
                                 Text(buildList {
@@ -393,7 +406,8 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                                 }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                     Text(DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(row.effectiveTimestamp)), style = MaterialTheme.typography.labelSmall)
-                                    TextButton(onClick = { selected = row; selectedId = row.id; quickForm = true; form = true }) { Text("Categorize") }
+                                    TextButton(onClick = { selected = row; selectedId = row.id; quickForm = true; form = true },
+                                        contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Categorize") }
                                 }
                                 if (row.ownership == "Group") {
                                     val personal = row.personalShareMinor ?: row.amountMinor ?: 0
@@ -409,12 +423,9 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                                 if (row.reviewState == "NeedsReview" || row.status != "Successful")
                                     Text("${friendly(row.status)} · ${friendly(row.reviewState)}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
                                 else if (row.isUserCorrected) Text("Edited by you", style = MaterialTheme.typography.labelSmall)
-                                HorizontalDivider(Modifier.padding(top = 6.dp))
+                                HorizontalDivider(Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         }
                     }
-                }
-                if (destination != "Review") item("add-transaction") {
-                    Button(onClick = { selected = null; selectedId = null; form = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("+ Add transaction") }
                 }
                 if (destination != "Overview" && (offset > 0 || snapshot?.hasOlder == true)) item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { offset = maxOf(0, offset - 100); snapshot = null }, enabled = !loading && offset > 0) { Text("Newer") }
@@ -422,6 +433,17 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     TextButton(onClick = { offset += 100; snapshot = null }, enabled = !loading && snapshot?.hasOlder == true && offset <= Int.MAX_VALUE - 201) { Text("Older") }
                 }
                 }
+                }
+                if (destination != "Review" && !(destination == "Overview" && showGuide)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        Button(onClick = { selected = null; selectedId = null; form = true }, enabled = !busy,
+                            modifier = Modifier.semantics { contentDescription = "Add transaction" },
+                            shape = MaterialTheme.shapes.large,
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp, pressedElevation = 1.dp),
+                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)) {
+                            Text("+ Add transaction")
+                        }
+                    }
                 }
                 LedgerNavigation(destination) { next ->
                     if (next != destination) { destination = next; offset = 0; snapshot = null }
@@ -487,6 +509,19 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 }
             }
             HorizontalDivider()
+            Text("Payment source", style = MaterialTheme.typography.labelLarge)
+            if (paymentSources.isEmpty()) Text("Add a payment source in Settings to filter by it.", style = MaterialTheme.typography.bodySmall)
+            else {
+                Text("Choose one or more registered sources.", style = MaterialTheme.typography.bodySmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    paymentSources.sortedWith(compareByDescending<PaymentSourceEntity> { it.active }.thenBy { it.nickname.lowercase() }).forEach { source ->
+                        FilterChip(selected = source.id in draftSourceIds, onClick = {
+                            draftSourceIds = if (source.id in draftSourceIds) draftSourceIds - source.id else draftSourceIds + source.id
+                        }, label = { Text(source.nickname + if (source.active) "" else " · inactive") })
+                    }
+                }
+            }
+            HorizontalDivider()
             Text("Category", style = MaterialTheme.typography.labelLarge)
             Text("Choose one or more. None selected includes all categories.", style = MaterialTheme.typography.bodySmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -498,12 +533,14 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
             }
         }
     }, confirmButton = { TextButton(onClick = {
-        val next = combinedFilter(draftPurposeFilter, draftOriginFilter, draftDirectionFilter, draftCategories)
+        val knownSourceIds = paymentSources.map { it.id }.toSet()
+        val next = combinedFilter(draftPurposeFilter, draftOriginFilter, draftDirectionFilter, draftCategories,
+            draftSourceIds.filter { it in knownSourceIds })
         if (next != filter || offset != 0) { filter = next; offset = 0; snapshot = null }
         showFilters = false
     }) { Text("Apply") } },
         dismissButton = { TextButton(onClick = {
-            draftPurposeFilter = "All"; draftOriginFilter = "All"; draftDirectionFilter = "All"; draftCategories = emptyList()
+            draftPurposeFilter = "All"; draftOriginFilter = "All"; draftDirectionFilter = "All"; draftCategories = emptyList(); draftSourceIds = emptyList()
             if (filter != "All" || offset != 0) { filter = "All"; offset = 0; snapshot = null }
             showFilters = false
         }, modifier = Modifier.semantics { contentDescription = "Clear transaction filters" }) { Text("Clear all") } })
@@ -542,11 +579,23 @@ private fun directionPart(value: String): String = value.split("+").firstOrNull 
 
 private fun categoryParts(value: String): List<String> = value.split("+").filter { it.startsWith("Category:") }.map { it.removePrefix("Category:") }
 
-private fun combinedFilter(purpose: String, origin: String, direction: String = "All", categories: List<String> = emptyList()): String = (listOf(purpose, origin, direction) +
-    transactionCategories.filter { it in categories }.map { "Category:$it" })
+private fun sourceParts(value: String): List<String> = value.split("+").filter { it.startsWith("Source:") }.map { it.removePrefix("Source:") }
+
+private fun combinedFilter(purpose: String, origin: String, direction: String = "All", categories: List<String> = emptyList(),
+    sourceIds: List<String> = emptyList()): String = (listOf(purpose, origin, direction) +
+    transactionCategories.filter { it in categories }.map { "Category:$it" } + sourceIds.distinct().map { "Source:$it" })
     .filter { it != "All" }.joinToString("+").ifBlank { "All" }
 
-private fun filterLabel(value: String): String = value.split("+").joinToString(" · ") { if (it.startsWith("Category:")) it.removePrefix("Category:") else friendlyFilter(it) }
+private fun filterLabel(value: String, paymentSources: List<PaymentSourceEntity>): String {
+    val sourceNames = paymentSources.associate { it.id to it.nickname }
+    return value.split("+").joinToString(" · ") {
+        when {
+            it.startsWith("Category:") -> it.removePrefix("Category:")
+            it.startsWith("Source:") -> sourceNames[it.removePrefix("Source:")] ?: "Payment source"
+            else -> friendlyFilter(it)
+        }
+    }
+}
 
 private fun friendlyFilter(value: String): String = when (value) {
     "Review" -> "Needs review"
@@ -574,7 +623,7 @@ private fun transactionLabels(row: TransactionEntity): String? = buildList {
 
 @Composable
 private fun LedgerNavigation(destination: String, onNavigate: (String) -> Unit) {
-    HorizontalDivider()
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         LedgerNavigationButton("Overview", destination, "Open overview", onNavigate, Modifier.weight(1f))
         LedgerNavigationButton("Transactions", destination, "Open transactions", onNavigate, Modifier.weight(1f))
@@ -585,7 +634,10 @@ private fun LedgerNavigation(destination: String, onNavigate: (String) -> Unit) 
 @Composable
 private fun LedgerNavigationButton(label: String, destination: String, description: String, onNavigate: (String) -> Unit, modifier: Modifier) {
     TextButton(onClick = { onNavigate(label) }, modifier = modifier.semantics { contentDescription = description },
-        colors = ButtonDefaults.textButtonColors(containerColor = if (destination == label) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent)) {
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+        colors = ButtonDefaults.textButtonColors(
+            contentColor = if (destination == label) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            containerColor = if (destination == label) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent)) {
         Text(label)
     }
 }

@@ -20,6 +20,15 @@ class LedgerUxTest {
         rule.onNodeWithText("Review queue").assertIsDisplayed()
     }
 
+    @Test fun compact_add_action_is_accessible_and_opens_manual_entry() {
+        if (rule.onAllNodesWithText("Skip for now").fetchSemanticsNodes().isNotEmpty()) {
+            rule.onNodeWithText("Skip for now").performClick()
+        }
+        rule.onNodeWithContentDescription("Add transaction").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Amount (INR)").assertIsDisplayed()
+        rule.onNodeWithText("Cancel").performClick()
+    }
+
     @Test fun personalization_updates_the_home_greeting() {
         val repository = (rule.activity.application as FinanceMinistryApp).container.repository
         val original = repository.preferences.getString("preferred_name", "").orEmpty()
@@ -56,7 +65,7 @@ class LedgerUxTest {
             rule.onNode(hasText("Bills") and hasAnyAncestor(isDialog())).performScrollTo().performClick()
             rule.onNode(hasText("Flat expenses") and hasAnyAncestor(isDialog())).performScrollTo().performClick()
             rule.onNodeWithText("Apply").performClick()
-            rule.waitUntil(15000) { rule.onAllNodesWithText("Loading transactions…").fetchSemanticsNodes().isEmpty() }
+            rule.waitUntil(15000) { rule.onAllNodesWithText("Filter fixture Bills").fetchSemanticsNodes().isNotEmpty() }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Filter fixture Bills"))
             rule.onNodeWithText("Filter fixture Bills").assertIsDisplayed()
             rule.onNodeWithText("Filter fixture Food").assertDoesNotExist()
@@ -66,12 +75,15 @@ class LedgerUxTest {
             rule.onNode(hasText("Flat expenses") and hasAnyAncestor(isDialog())).performScrollTo().assertIsSelected()
             rule.onNode(hasText("Bills") and hasAnyAncestor(isDialog())).performScrollTo().performClick()
             rule.onNodeWithText("Apply").performClick()
-            rule.waitUntil(15000) { rule.onAllNodesWithText("Loading transactions…").fetchSemanticsNodes().isEmpty() }
+            rule.waitUntil(15000) {
+                rule.onAllNodesWithText("Filter fixture Flat expenses").fetchSemanticsNodes().isNotEmpty() &&
+                    rule.onAllNodesWithText("Filter fixture Bills").fetchSemanticsNodes().isEmpty()
+            }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Filter fixture Flat expenses"))
             rule.onNodeWithText("Filter fixture Bills").assertDoesNotExist()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Clear transaction filters"))
             rule.onNodeWithContentDescription("Clear transaction filters").performClick()
-            rule.waitUntil(15000) { rule.onAllNodesWithText("Loading transactions…").fetchSemanticsNodes().isEmpty() }
+            rule.waitUntil(15000) { rule.onAllNodesWithText("Filter fixture Food").fetchSemanticsNodes().isNotEmpty() }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Filter fixture Food"))
             rule.onNodeWithText("Filter fixture Food").assertIsDisplayed()
         } finally { runBlocking { ids.forEach { repository.delete(it) } } }
@@ -114,7 +126,7 @@ class LedgerUxTest {
             openFilters()
             rule.onNode(hasText("Added manually") and hasAnyAncestor(isDialog())).performScrollTo().performClick()
             rule.onNodeWithText("Apply").performClick()
-            rule.waitUntil(15000) { rule.onAllNodesWithText("Loading transactions…").fetchSemanticsNodes().isEmpty() }
+            rule.waitUntil(15000) { rule.onAllNodesWithText("Added manually").fetchSemanticsNodes().isNotEmpty() }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Added manually"))
             rule.onNodeWithText("Added manually").assertIsDisplayed().performClick()
             rule.onNodeWithText("Apply").performClick()
@@ -148,6 +160,37 @@ class LedgerUxTest {
         } finally { runBlocking { repository.delete(debit); repository.delete(credit) } }
     }
 
+    @Test fun registered_payment_source_filters_transactions_from_the_existing_dialog() {
+        val repository = (rule.activity.application as FinanceMinistryApp).container.repository
+        val suffix = java.util.UUID.randomUUID().toString().filter(Char::isLetter).take(8)
+        val sourceName = "Filter UPI $suffix"
+        var source: `in`.financeministry.app.data.PaymentSourceEntity? = null
+        var matching: String? = null
+        var other: String? = null
+        try {
+            val createdSource = runBlocking { repository.addPaymentSource(sourceName, "UPI", `in`.financeministry.app.core.model.Channel.UPI, "Test bank", "7111") }
+            source = createdSource
+            matching = runBlocking { repository.save(`in`.financeministry.app.data.ManualInput("81.25", `in`.financeministry.app.core.model.Direction.Debit,
+                System.currentTimeMillis(), `in`.financeministry.app.core.model.TransactionType.Other,
+                channel = `in`.financeministry.app.core.model.Channel.UPI, label = "Source filter match $suffix", paymentSourceId = createdSource.id)) }
+            other = runBlocking { repository.save(`in`.financeministry.app.data.ManualInput("82.25", `in`.financeministry.app.core.model.Direction.Debit,
+                System.currentTimeMillis(), `in`.financeministry.app.core.model.TransactionType.Other, label = "Source filter other $suffix")) }
+            openFilters()
+            rule.onNode(hasText(sourceName) and hasAnyAncestor(isDialog())).performScrollTo().performClick()
+            rule.onNodeWithText("Apply").performClick()
+            rule.waitUntil(15000) { rule.onAllNodesWithText("1 matching transaction").fetchSemanticsNodes().isNotEmpty() }
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Source filter match $suffix"))
+            rule.onNodeWithText("Source filter match $suffix").assertIsDisplayed()
+            rule.onNodeWithText("Source filter other $suffix").assertDoesNotExist()
+        } finally {
+            runBlocking {
+                matching?.let { repository.delete(it) }
+                other?.let { repository.delete(it) }
+                source?.let { repository.deletePaymentSource(it.id) }
+            }
+        }
+    }
+
     @Test fun search_shows_only_matching_rows_and_its_own_result_scope() {
         val repository = (rule.activity.application as FinanceMinistryApp).container.repository
         val debitLabel = "Needle debit"; val creditLabel = "Needle credit"; val otherLabel = "Haystack payment"
@@ -158,7 +201,7 @@ class LedgerUxTest {
             rule.onNodeWithContentDescription("Open transactions").performClick()
             rule.onNodeWithText("Search transactions").performTextInput("Needle")
             rule.waitUntil(15000) { rule.onAllNodesWithText("2 matching transactions").fetchSemanticsNodes().isNotEmpty() }
-            rule.onNodeWithText("Result totals are separate from Overview.").assertIsDisplayed()
+            rule.onNodeWithText("Filtered totals use the same confirmed-payment rules as Overview.").assertIsDisplayed()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(debitLabel))
             rule.onNodeWithText(debitLabel).assertIsDisplayed()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(creditLabel))
@@ -308,6 +351,7 @@ class LedgerUxTest {
             assertEquals("NeedsReview", runBlocking { repository.get(transactionId!!)!!.reviewState })
             sourceId = runBlocking { repository.addPaymentSource(nickname, "Bank account", `in`.financeministry.app.core.model.Channel.UPI, "Test bank", "6789").id }
 
+            rule.onNodeWithContentDescription("Open overview").performClick()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("₹87.65"))
             rule.onNodeWithText("₹87.65").performClick()
             rule.onNodeWithText("Choose payment source").performClick()

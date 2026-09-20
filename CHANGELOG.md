@@ -4,6 +4,22 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.1.0-alpha.12
+
+- Refine the ledger into the approved Quiet Ledger presentation with calmer
+  surfaces, smoother rounded cards, lighter dividers, clearer dark-theme contrast,
+  flatter transaction rows and a compact Add transaction action.
+- Make the Overview summary explicitly describe **Your share of spending** and
+  clarify how personal, family and group shares contribute to it.
+- Make filtered transaction-result totals use the same confirmed-payment rules as
+  Overview, excluding review items, failed payments, self transfers, card
+  repayments and reversed originals from Money in and Money out.
+- Add multi-select filtering by registered payment source, including inactive
+  sources, alongside the existing direction, purpose, origin and category filters.
+- Improve transaction-result labels and helper text so filtered totals are easier
+  to compare with the whole-month Overview.
+- Preserve the first-use welcome flow without showing a duplicate Add action.
+
 ## 0.1.0-alpha.11
 
 - Redesign the ledger around three focused destinations: **Overview** for the
