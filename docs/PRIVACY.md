@@ -46,14 +46,22 @@ This is configuration and emulator evidence, not a guarantee about every OEM's b
 
 ## Notifications and deletion
 
-Notifications contain normalized transaction details, not the source SMS. Private
+Notifications contain normalized transaction details, not the source SMS. Optional
+budget and recurring-payment notifications contain only the configured category,
+reminder name and normalized amount. A reminder never initiates a payment or records
+a transaction. Private
 lock-screen visibility is requested; review your device's notification settings.
 Android's own Messages app can independently show the original SMS.
 
 Deleting a transaction also removes its correction history. Erase all removes the
 database, keys and settings and pauses capture. Uninstalling removes the local ledger.
-There is no restore, export or recovery service in this alpha. Database key errors
-preserve existing files rather than silently replacing the ledger.
+The app can create a user-chosen password-encrypted backup through Android's file
+picker and can restore that file after validation and a preview. The password and
+file are not uploaded or recoverable by the app. A CSV export is a readable report,
+not a complete restore backup, and is unencrypted once written to the location the
+user chooses. Restore replaces the local ledger atomically and pauses SMS capture and
+reminders for explicit reconfirmation. Database key or restore errors preserve the
+existing ledger rather than silently replacing it.
 
 ## Debug alpha
 

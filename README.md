@@ -6,7 +6,8 @@ An Android expense tracker that records transactions from incoming SMS and lets 
 
 **Status: early alpha.** The release channel is for installable **debug APKs** for testing. The app is being developed by one maintainer and is not ready for general use. Parsing can miss or misclassify transactions; check your records. Do not make this your only financial record.
 
-The current debug alpha is [v0.1.0-alpha.12](https://github.com/hk121902-stack/finance-ministry/releases/tag/v0.1.0-alpha.12).
+The release candidate in this repository is **v0.1.0-alpha.13**. The latest published
+debug alpha remains available from [GitHub Releases](https://github.com/hk121902-stack/finance-ministry/releases).
 Download the debug APK from its assets. The release includes its SHA-256 checksum,
 signing-certificate details, and license notices. Physical-device testing is pending.
 
@@ -20,6 +21,16 @@ signing-certificate details, and license notices. Physical-device testing is pen
 - Use a focused Overview, searchable Transactions and a separate all-dates Review queue.
 - Set an optional on-device home greeting and filter transactions by category, purpose,
   money flow or origin. Filter-result totals never replace monthly Overview totals.
+- Track partial repayments and gifts/treats without mixing gross group payments into
+  personal spending or silently settling any debt.
+- Review possible duplicate records and own-account transfers as suggestions, with
+  both original records retained and decisions reversible.
+- Use spending breakdowns, remembered category rules, selected-row batch cleanup,
+  optional category budgets and local monthly payment reminders.
+- Create a password-encrypted portable backup, preview and atomically restore it, or
+  export a readable CSV report. The password cannot be recovered by the app.
+- Add a privacy-first home-screen widget: quick add is amount-free by default; the
+  optional monthly summary requires explicit consent and hides while locked.
 - Edit records, keep correction history, delete individual records, or erase all local data.
 - Browse history in 100-record pages, filter manual/review/edited entries, and see daily/monthly debit and credit totals.
 - Extract supported masked account hints and recipient labels; conservatively link full-amount refunds/reversals when strong matching evidence exists.
@@ -74,7 +85,7 @@ See the [remaining parser work](docs/ROADMAP.md#confirmed-open-parser-issues).
 
 Download the next APK from the same repository and install it over the existing app. Official alpha releases use one persistent signing identity and an increasing Android version code. Local developer builds use a different key and may not update an official APK in place.
 
-**Do not uninstall to troubleshoot an update without understanding the consequence:** uninstalling or using Erase all removes the local ledger. There is currently no export, backup, cloud restore, or data recovery. Release notes will call out known upgrade restrictions. Moving to a future production signing identity may require a separate migration plan.
+**Do not uninstall to troubleshoot an update without understanding the consequence:** uninstalling or using Erase all removes the local ledger. Create a password-encrypted backup in **Settings → Backup & export** first and verify that you retain both the file and password. There is no cloud account, automatic sync or password-recovery service. Release notes will call out known upgrade restrictions. Moving to a future production signing identity may require a separate migration plan.
 
 ### Debug-build limits
 
@@ -90,6 +101,7 @@ The app does not keep raw SMS bodies or senders in its database. Manually entere
 - Monthly summaries exclude failed, reversed, pending, transfer and needs-review records. They are transaction summaries, not a verified account balance.
 - History is paginated in 100-record pages; summaries are not verified bank balances.
 - OEM background restrictions, multipart edge cases, permission lifecycle behavior, and real-phone reliability need broader testing.
+- Home-screen widget availability and layout depend on the Android launcher.
 - No automatic updater; check Releases for updates.
 
 ## Build from source

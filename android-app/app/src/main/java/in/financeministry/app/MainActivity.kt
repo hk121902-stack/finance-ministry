@@ -25,6 +25,8 @@ class MainActivity : ComponentActivity() {
     private val request = mutableStateOf<Pair<String, Boolean>?>(null)
     private val quickRequest = mutableStateOf(false)
     private val reviewRequestGeneration = androidx.compose.runtime.mutableIntStateOf(0)
+    private val addRequestGeneration = androidx.compose.runtime.mutableIntStateOf(0)
+    private val optionalToolRequest = mutableStateOf<String?>(null)
     private val resumeGeneration = androidx.compose.runtime.mutableIntStateOf(0)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,7 +35,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             FinanceMinistryTheme {
                 LedgerApp((application as FinanceMinistryApp).container.repository, request.value, resumeGeneration.intValue,
-                    reviewRequestGeneration.intValue, quickRequest = quickRequest.value) {
+                    reviewRequestGeneration.intValue, addRequestGeneration.intValue,
+                    optionalToolRequest = optionalToolRequest.value, quickRequest = quickRequest.value,
+                    consumeOptionalToolRequest = { optionalToolRequest.value = null }) {
                     request.value = null
                     intent.removeExtra("transaction_id"); intent.removeExtra("edit"); intent.removeExtra("quick_classify")
                 }
@@ -41,7 +45,7 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onResume() { super.onResume(); resumeGeneration.intValue++ }
-    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); readRequest(intent) }
+    public override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); readRequest(intent) }
     fun requestReview() { reviewRequestGeneration.intValue++ }
     private fun readRequest(intent: Intent) {
         quickRequest.value = intent.getBooleanExtra("quick_classify", false)
@@ -49,6 +53,14 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("open_review", false)) {
             requestReview()
             intent.removeExtra("open_review")
+        }
+        if (intent.getBooleanExtra("open_add", false)) {
+            addRequestGeneration.intValue++
+            intent.removeExtra("open_add")
+        }
+        intent.getStringExtra("open_optional_tools")?.let {
+            optionalToolRequest.value = it
+            intent.removeExtra("open_optional_tools")
         }
     }
 }

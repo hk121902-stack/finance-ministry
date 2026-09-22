@@ -18,6 +18,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import `in`.financeministry.app.data.*
 import `in`.financeministry.app.core.model.transactionCategories
@@ -49,7 +50,8 @@ fun transactionTime(millis: Long): String = DateTimeFormatter.ofPattern("dd MMM 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?, refreshGeneration: Int = 0,
-    reviewRequestGeneration: Int = 0, quickRequest: Boolean = false, consumeRequest: () -> Unit) {
+    reviewRequestGeneration: Int = 0, addRequestGeneration: Int = 0, optionalToolRequest: String? = null,
+    quickRequest: Boolean = false, consumeOptionalToolRequest: () -> Unit = {}, consumeRequest: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val revision by repository.revision.collectAsState()
@@ -67,6 +69,11 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var eraseDialog by remember { mutableStateOf(false) }
     var deleteDialog by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var handledReviewRequest by remember { mutableIntStateOf(0) }
+    var handledAddRequest by remember { mutableIntStateOf(0) }
+    var addWarning by remember { mutableStateOf(false) }
+    var optionalToolWarning by remember { mutableStateOf(false) }
+    var optionalToolsInitialTab by rememberSaveable { mutableStateOf("Budgets") }
     var notifications by remember { mutableStateOf(repository.preferences.getBoolean("notifications", true)) }
     var captureEnabled by remember { mutableStateOf(repository.captureAllowed()) }
     var notificationAvailable by remember { mutableStateOf(`in`.financeministry.app.sms.TransactionNotifications.available(context)) }
@@ -77,6 +84,13 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var loading by remember { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
     var settingsSection by rememberSaveable { mutableStateOf<String?>(null) }
+    var showInsights by rememberSaveable { mutableStateOf(false) }
+    var showRepayments by rememberSaveable { mutableStateOf(false) }
+    var showBatch by rememberSaveable { mutableStateOf(false) }
+    var showMatches by rememberSaveable { mutableStateOf(false) }
+    var matchHistory by rememberSaveable { mutableStateOf(false) }
+    var selectedMatch by remember { mutableStateOf<MatchDecisionEntity?>(null) }
+    var categoryConflictCount by remember { mutableIntStateOf(0) }
     var reviewAvailable by remember { mutableStateOf(false) }
     var reviewCount by remember { mutableIntStateOf(0) }
     var selectedMonth by rememberSaveable { mutableStateOf(java.time.YearMonth.now().toString()) }
@@ -95,7 +109,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var preferredNameDraft by rememberSaveable { mutableStateOf(preferredName) }
     val ledgerListState = rememberLazyListState()
     BackHandler(enabled = settings && !form && selectedId == null) {
-        if (settingsSection != null) settingsSection = null else settings = false
+        if (!busy) { if (settingsSection != null) settingsSection = null else settings = false }
     }
     BackHandler(enabled = !settings && !form && selectedId == null && destination != "Overview") {
         destination = "Overview"; offset = 0; snapshot = null
@@ -110,11 +124,17 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
         notificationAvailable = `in`.financeministry.app.sms.TransactionNotifications.available(context)
     }
     BackHandler(enabled = selected != null && !form) { if (!busy) { selected = null; selectedId = null } }
-    LaunchedEffect(selectedId) {
-        if (selectedId != null && selected?.id != selectedId) {
+    LaunchedEffect(selectedId, revision, form) {
+        if (selectedId != null && (!form || selected?.id != selectedId)) {
             try { selected = repository.get(selectedId!!); if (selected == null) { selectedId = null; form = false; error = "This transaction no longer exists." } }
             catch (_: Exception) { error = "Cannot open this transaction."; selectedId = null; form = false }
         }
+        try {
+            selectedMatch = selectedId?.let { id -> repository.matchDecisions().firstOrNull {
+                it.undoneAt == null && it.action != "KeepBoth" && (it.firstId == id || it.secondId == id)
+            } }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (_: Exception) { selectedMatch = null; error = "Could not load match history. Your ledger is unchanged." }
     }
     LaunchedEffect(revision, offset, filter, destination, search, refreshGeneration, selectedMonth) {
         loading = true
@@ -131,36 +151,93 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     java.time.YearMonth.parse(selectedMonth).atDay(1), LocalDate.now(),
                     if (destination == "Transactions") search else "")
             snapshot = result
+            if (java.time.YearMonth.parse(selectedMonth) == java.time.YearMonth.now()) {
+                // Optional surfaces must never turn a healthy local ledger into a storage error.
+                runCatching { `in`.financeministry.app.widget.FinanceWidget.updateAll(context) }
+                runCatching { `in`.financeministry.app.sms.BudgetAlerts.evaluate(context, repository) }
+            }
             paymentSources = repository.paymentSources()
             reviewCount = repository.reviewCount()
             reviewAvailable = reviewCount > 0
+            categoryConflictCount = repository.categoryConflicts().size
             if (result.rows.isEmpty() && offset > 0) offset = maxOf(0, offset - 100)
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (_: Exception) { error = "Cannot open encrypted storage. Existing data was preserved. Erase all only if you intend to delete it." }
         finally { loading = false }
     }
-    LaunchedEffect(reviewRequestGeneration) {
-        if (reviewRequestGeneration > 0) {
+    LaunchedEffect(reviewRequestGeneration, busy) {
+        if (busy) return@LaunchedEffect
+        if (reviewRequestGeneration > 0 && reviewRequestGeneration != handledReviewRequest) {
+            handledReviewRequest = reviewRequestGeneration
             if (form && dirtyForm) reviewWarning = true
             else {
-                settings = false; settingsSection = null; selected = null; selectedId = null; form = false
+                settings = false; settingsSection = null; selected = null; selectedId = null; form = false; showInsights = false; showRepayments = false; showBatch = false; showMatches = false
                 destination = "Review"; offset = 0; snapshot = null
             }
         }
     }
+    LaunchedEffect(addRequestGeneration, busy) {
+        if (busy || addRequestGeneration == 0 || addRequestGeneration == handledAddRequest) return@LaunchedEffect
+        handledAddRequest = addRequestGeneration
+        if (form && dirtyForm) addWarning = true
+        else {
+            dirtyForm = false; quickForm = false; selected = null; selectedId = null; form = true
+            settings = false; settingsSection = null; showInsights = false; showRepayments = false; showBatch = false; showMatches = false
+            destination = "Overview"; error = null
+        }
+    }
+    LaunchedEffect(optionalToolRequest, busy) {
+        if (busy || optionalToolRequest == null) return@LaunchedEffect
+        if (form && dirtyForm) optionalToolWarning = true
+        else {
+            optionalToolsInitialTab = optionalToolRequest
+            selected = null; selectedId = null; form = false; settings = true; settingsSection = "Optional tools"
+            showInsights = false; showRepayments = false; showBatch = false; showMatches = false; error = null
+            consumeOptionalToolRequest()
+        }
+    }
     LaunchedEffect(selectedMonth) { ledgerListState.scrollToItem(0) }
-    LaunchedEffect(request, requestApproval) {
+    LaunchedEffect(request, requestApproval, busy) {
+        if (busy) return@LaunchedEffect
         if (request != null) {
             if (form && dirtyForm && approvedRequest != request) { requestWarning = true; return@LaunchedEffect }
             approvedRequest = null
             dirtyForm = false
             quickForm = quickRequest
-            selected = null; selectedId = null; form = false; settings = false; destination = "Overview"
+            selected = null; selectedId = null; form = false; settings = false; showInsights = false; showRepayments = false; showBatch = false; showMatches = false; destination = "Overview"
             try { selected = repository.get(request.first); if (selected == null) error = "This transaction no longer exists." else { selectedId = selected!!.id; form = request.second; error = null } }
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (_: Exception) { error = "Cannot open this transaction. Data was preserved." }
             consumeRequest()
         }
+    }
+    if (showMatches && !settings && selectedId == null && !form) {
+        `in`.financeministry.app.feature.MatchingReviewScreen(repository, initialHistory = matchHistory,
+            onDetails = { showMatches = false; destination = "Review"; offset = 0; snapshot = null },
+            onNavigate = { showMatches = false; destination = it; offset = 0; snapshot = null },
+            onSettings = { showMatches = false; settings = true; settingsSection = null },
+            onTransaction = { selected = null; selectedId = it; matchHistory = true },
+            onBusyChange = { busy = it })
+        return
+    }
+    if (showBatch) {
+        `in`.financeministry.app.feature.BatchCleanupScreen(repository, snapshot?.rows.orEmpty(),
+            "${java.time.YearMonth.parse(selectedMonth).format(DateTimeFormatter.ofPattern("MMMM uuuu"))} · ${filterLabel(filter, paymentSources)} · Page ${offset / 100 + 1}",
+            onBack = { showBatch = false })
+        return
+    }
+    if (showRepayments && selectedId == null && !form) {
+        `in`.financeministry.app.feature.RepaymentsScreen(repository, java.time.YearMonth.parse(selectedMonth).atDay(1),
+            onBack = { showRepayments = false }, onExpense = { selected = null; selectedId = it })
+        return
+    }
+    if (showInsights) {
+        `in`.financeministry.app.feature.SpendingInsightsScreen(repository, java.time.YearMonth.parse(selectedMonth).atDay(1),
+            onBack = { showInsights = false },
+            onTransaction = { showInsights = false; selected = null; selectedId = it },
+            onReview = { showInsights = false; destination = "Review"; offset = 0; snapshot = null },
+            onBudget = { showInsights = false; optionalToolsInitialTab = "Budgets"; settings = true; settingsSection = "Optional tools" })
+        return
     }
     Surface(Modifier.fillMaxSize()) {
         val ledgerScroll = rememberScrollState()
@@ -178,7 +255,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     if (settings && settingsSection != null) settingsSection = null
                     else if (settings) { settings = false; settingsSection = null; destination = "Overview" }
                     else { settings = true; settingsSection = null }
-                }) { Text(if (settings && settingsSection != null) "Back" else if (settings) "Home" else "Settings") }
+                }, enabled = !busy) { Text(if (settings && settingsSection != null) "Back" else if (settings) "Home" else "Settings") }
             }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (selectedId != null && selected == null) { Text("Loading transaction…") }
@@ -193,7 +270,14 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 if (row.paymentSourceId == null && paymentSources.any { it.active && it.channel == row.channel })
                     TextButton(onClick = { showSourcePicker = true }) { Text("Choose payment source") }
                 transactionLabels(row)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                row.groupLabel?.let { Text("Group: $it", style = MaterialTheme.typography.bodySmall) }
+                if (row.duplicateOfId != null) Text("Excluded duplicate · the other record is counted", style = MaterialTheme.typography.bodyMedium)
+                selectedMatch?.let { decision ->
+                    Text(if (decision.action == "SelfTransfer") "Confirmed own-account transfer · excluded from spending and money-in/out totals."
+                        else "Part of a confirmed duplicate pair. Both records are retained.", style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { selected = null; selectedId = null; showMatches = true; matchHistory = true }) { Text("Review match decision") }
+                    Text("Undo the match decision before editing this record.", style = MaterialTheme.typography.bodySmall)
+                }
+                row.groupLabel?.let { Text("${if (row.ownership == "Group") "Group" else "For"}: $it", style = MaterialTheme.typography.bodySmall) }
                 repaymentSummary(row, snapshot?.reversedOriginalIds.orEmpty())?.let { (label, owed) ->
                     Text("$label: ${money(owed)}", style = MaterialTheme.typography.bodySmall)
                 }
@@ -214,8 +298,10 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     Text("Linked by matching reference, account, channel and full amount.", style = MaterialTheme.typography.bodySmall)
                 }
                 row.counterpartyLabel?.let { Text(it) }; row.maskedAccountHint?.let { Text(it) }; row.userNotes?.let { Text(it) }
+                `in`.financeministry.app.feature.RepaymentHistoryPanel(repository, row,
+                    RepaymentAccounting.eligible(row, snapshot?.reversedOriginalIds.orEmpty()))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Button(onClick = { form = true }) { Text("Edit / confirm") }
+                    Button(onClick = { form = true }, enabled = selectedMatch == null) { Text("Edit / confirm") }
                     OutlinedButton(onClick = { selected = null; selectedId = null }) { Text("Back") }
                 }
                 TextButton(onClick = { deleteDialog = true }) { Text("Delete transaction") }
@@ -228,7 +314,10 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         }
                         SettingsRow("SMS and past messages", if (captureEnabled) "New SMS capture is on" else "Capture is off · Manual entry still works") { settingsSection = "SMS & messages" }
                         SettingsRow("Payment sources", if (paymentSources.count { it.active } == 0) "Add your UPI, accounts and cards" else "${paymentSources.count { it.active }} active") { settingsSection = "Payment sources" }
+                        SettingsRow("Category rules", "Remember merchant categories for future payments") { settingsSection = "Category rules" }
+                        SettingsRow("Backup & export", "Encrypted backups, restore and readable reports") { settingsSection = "Backup & export" }
                         SettingsRow("Review reminders", if (repository.preferences.getBoolean("review_reminder", false)) "Daily reminder is on" else "Off") { settingsSection = "Review reminders" }
+                        SettingsRow("Optional tools", "Budgets, payment reminders and home-screen widget") { settingsSection = "Optional tools" }
                         SettingsRow("Data and privacy", "Local storage, erasure and recovery") { settingsSection = "Data & privacy" }
                         SettingsRow("Getting started", "Review the setup checklist") { showGuide = true; settings = false; settingsSection = null }
                     }
@@ -244,6 +333,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     }
                     "SMS & messages" -> {
                         Text("Record supported bank alerts as transactions. You can always add or correct a transaction yourself.")
+                        TextButton(onClick = { settingsSection = "Capture health" }) { Text("Capture health") }
                         Button(onClick = {
                             if (captureEnabled) { repository.preferences.edit().putBoolean("sms_disclosure", false).apply(); captureEnabled = false } else disclosure = true
                         }, enabled = !busy) { Text(if (captureEnabled) "Pause SMS capture" else "Enable SMS capture") }
@@ -262,11 +352,30 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         }
                         `in`.financeministry.app.feature.HistoricalImportPanel(repository)
                     }
+                    "Capture health" -> `in`.financeministry.app.feature.CaptureHealthPanel(repository, refreshGeneration,
+                        onAdd = { settings = false; settingsSection = null; selected = null; selectedId = null; quickForm = false; form = true },
+                        onImport = { settingsSection = "Import past messages" },
+                        onManageCapture = { settingsSection = "SMS & messages" },
+                        onReminder = { settingsSection = "Review reminders" })
+                    "Import past messages" -> `in`.financeministry.app.feature.HistoricalImportPanel(repository)
                     "Payment sources" -> `in`.financeministry.app.feature.PaymentSourcesPanel(repository)
+                    "Backup & export" -> `in`.financeministry.app.feature.BackupPanel(repository, java.time.YearMonth.parse(selectedMonth).atDay(1),
+                        onBusyChange = { busy = it }, onRestored = {
+                            preferredName = repository.preferences.getString("preferred_name", "").orEmpty()
+                            captureEnabled = repository.captureAllowed(); notifications = repository.preferences.getBoolean("notifications", true)
+                            showGuide = !repository.preferences.getBoolean("onboarding_complete", false)
+                        })
+                    "Category rules" -> `in`.financeministry.app.feature.CategoryRulesPanel(repository) { id ->
+                        settings = false; selected = null; selectedId = id; quickForm = true; form = true
+                    }
                     "Review reminders" -> `in`.financeministry.app.feature.ReviewReminderPanel(repository, refreshGeneration)
+                    "Optional tools" -> `in`.financeministry.app.feature.OptionalToolsPanel(repository,
+                        java.time.YearMonth.parse(selectedMonth).atDay(1), initialTab = optionalToolsInitialTab, onAddPayment = {
+                            settings = false; settingsSection = null; selected = null; selectedId = null; quickForm = false; form = true
+                        })
                     "Data & privacy" -> {
                         Text("Your ledger stays encrypted on this device. The app has no bank connection or payment access.")
-                        Text("There is no backup or recovery after erasing data. Uninstalling the app loses your ledger.")
+                        Text("Uninstalling or erasing removes this device's ledger. Create an encrypted backup in Backup & export first if you want to restore it later.")
                         TextButton(onClick = { eraseDialog = true }, enabled = !busy) { Text("Erase all local data", color = MaterialTheme.colorScheme.error) }
                     }
                 }
@@ -302,7 +411,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                Text("Your share of spending", style = MaterialTheme.typography.labelMedium)
+                                Text("Your spending", style = MaterialTheme.typography.labelMedium)
                                 IconButton(onClick = { showSummaryDetails = true }, modifier = Modifier.semantics { contentDescription = "How totals work" }) { Text("ⓘ") }
                             }
                             Text(money(it.personalSpend), style = MaterialTheme.typography.headlineMedium)
@@ -315,7 +424,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                             }
                             if (showSummaryDetails) {
                                 AlertDialog(onDismissRequest = { showSummaryDetails = false }, title = { Text("How totals work") },
-                                    text = { Text("Money in and out cover the selected month. They exclude self transfers, card repayments, failed or unconfirmed payments, and reversed originals.\n\nYour share of spending is money out minus amounts paid for other people or groups that you expect back. Still owed includes unpaid amounts across all dates.\n\nToday shows eligible payments for today.") },
+                                    text = { Text("Money in and out cover the selected month. They exclude self transfers, card repayments, failed or unconfirmed payments, and reversed originals.\n\nYour spending includes personal and family payments, gifts, and only your share of group payments. Still owed includes unpaid amounts across all dates; the smaller line shows how much remains unpaid from payments in the selected month.\n\nThese are recorded transaction totals, not a verified account balance.") },
                                     confirmButton = { TextButton(onClick = { showSummaryDetails = false }) { Text("Got it") } })
                             }
                         } }
@@ -323,17 +432,28 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 }
                 if (destination == "Overview") item {
                     snapshot?.let {
-                        Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
+                        Card(Modifier.fillMaxWidth().clickable { showRepayments = true }.semantics { contentDescription = "Open repayments" }, shape = MaterialTheme.shapes.large,
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
-                            Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Column {
-                                Text("Still owed to you", style = MaterialTheme.typography.titleSmall)
-                                Text("All dates · repayments tracked", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Text(money(it.outstandingRepayments), style = MaterialTheme.typography.titleMedium)
-                        } }
+                            Column(Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    Column {
+                                        Text("Still owed to you", style = MaterialTheme.typography.titleSmall)
+                                        Text("Outstanding across all dates", style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Text(money(it.outstandingRepayments), style = MaterialTheme.typography.titleMedium)
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                Row(Modifier.fillMaxWidth().semantics { contentDescription = "Outstanding from selected month" },
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    Text("From ${it.selectedMonth.format(DateTimeFormatter.ofPattern("MMMM"))} payments",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(money(it.selectedMonthOutstandingRepayments), style = MaterialTheme.typography.titleSmall)
+                                }
+                            } }
                     }
                     if (repository.preferences.getBoolean("capture_error", false)) Text("A message could not be recorded. Add it manually if needed.", color = MaterialTheme.colorScheme.error)
                     if (reviewAvailable) Card(Modifier.fillMaxWidth().clickable { destination = "Review"; offset = 0; snapshot = null }
@@ -347,12 +467,14 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     }
                 }
                 if (destination == "Overview") item {
+                    TextButton(onClick = { showInsights = true }) { Text("Spending breakdown") }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Recent transactions", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 8.dp))
                     TextButton(onClick = { destination = "Transactions"; offset = 0; snapshot = null }) { Text("View all") }
                 }
                 }
                 if (destination == "Transactions") item {
+                    TextButton(onClick = { showBatch = true }, enabled = !loading && snapshot?.rows?.isNotEmpty() == true) { Text("Select transactions") }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text(java.time.YearMonth.parse(selectedMonth).format(DateTimeFormatter.ofPattern("MMMM uuuu")), style = MaterialTheme.typography.titleMedium)
                         TextButton(onClick = {
@@ -382,9 +504,16 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     }
                 }
                 if (destination == "Review") item {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = true, onClick = {}, label = { Text("Needs details") })
+                        FilterChip(selected = false, onClick = { matchHistory = false; showMatches = true }, label = { Text("Possible matches") })
+                    }
                     Text("All dates · $reviewCount remaining", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                     Text("Review queue", style = MaterialTheme.typography.titleLarge)
                     Text("Check uncertain details before a payment enters your totals.", style = MaterialTheme.typography.bodySmall)
+                    if (categoryConflictCount > 0) TextButton(onClick = { settings = true; settingsSection = "Category rules" }) {
+                        Text("$categoryConflictCount category choices needed · separate from financial review")
+                    }
                 }
                 val rows = if (destination == "Overview") snapshot?.rows.orEmpty().take(4) else snapshot?.rows.orEmpty()
                 if (loading) item { Text("Loading transactions…") }
@@ -423,6 +552,8 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                                 if (row.reviewState == "NeedsReview" || row.status != "Successful")
                                     Text("${friendly(row.status)} · ${friendly(row.reviewState)}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
                                 else if (row.isUserCorrected) Text("Edited by you", style = MaterialTheme.typography.labelSmall)
+                                if (row.categoryNeedsReview) Text("Category needs your choice · conflicting rules", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                if (row.duplicateOfId != null) Text("Excluded duplicate · retained in history", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 HorizontalDivider(Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         }
                     }
@@ -462,12 +593,28 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
             settings = false; settingsSection = null; destination = "Review"; offset = 0; snapshot = null
         }) { Text("Discard and review") } },
         dismissButton = { TextButton(onClick = { reviewWarning = false }) { Text("Keep editing") } })
+    if (addWarning) AlertDialog(onDismissRequest = { addWarning = false },
+        title = { Text("Keep your unsaved changes?") }, text = { Text("Quick add was requested while this transaction has unsaved changes.") },
+        confirmButton = { TextButton(onClick = {
+            addWarning = false; dirtyForm = false; quickForm = false; selected = null; selectedId = null; form = true
+            settings = false; settingsSection = null; showInsights = false; showRepayments = false; showBatch = false; showMatches = false; destination = "Overview"
+        }) { Text("Discard and add") } }, dismissButton = { TextButton(onClick = { addWarning = false }) { Text("Keep editing") } })
+    if (optionalToolWarning) AlertDialog(onDismissRequest = { optionalToolWarning = false; consumeOptionalToolRequest() },
+        title = { Text("Open optional tools?") }, text = { Text("Your current transaction changes have not been saved.") },
+        confirmButton = { TextButton(onClick = {
+            optionalToolWarning = false; dirtyForm = false; selected = null; selectedId = null; form = false
+            optionalToolsInitialTab = optionalToolRequest ?: "Budgets"; settings = true; settingsSection = "Optional tools"
+            showInsights = false; showRepayments = false; showBatch = false; showMatches = false
+            consumeOptionalToolRequest()
+        }) { Text("Discard and open") } }, dismissButton = { TextButton(onClick = {
+            optionalToolWarning = false; consumeOptionalToolRequest()
+        }) { Text("Keep editing") } })
     if (disclosure) AlertDialog(onDismissRequest = { disclosure = false }, title = { Text("Read new SMS on this device?") },
         text = { Text("Android gives this app access to incoming SMS, including non-financial messages. Processing stays on this device. We reject OTPs and non-transactions and store normalized financial fields in encrypted storage. Raw messages and senders are not stored or uploaded. SMS permission is optional; manual entry always works. No payment or bank connection is involved.") },
         confirmButton = { TextButton(onClick = { repository.preferences.edit().putBoolean("sms_disclosure", true).apply(); disclosure = false; smsPermission.launch(Manifest.permission.RECEIVE_SMS) }) { Text("I understand — continue") } },
         dismissButton = { TextButton(onClick = { disclosure = false }) { Text("Not now") } })
     if (eraseDialog) AlertDialog(onDismissRequest = { if (!busy) eraseDialog = false }, title = { Text("Erase all local data?") },
-        text = { Text("Permanently deletes transactions, corrections, encryption keys and settings. There is no backup or undo. SMS capture will be off.") },
+        text = { Text("Permanently deletes this device's transactions, corrections, encryption keys and settings. No automatic backup or undo is created. Previously exported backups are not deleted. SMS capture will be off.") },
         confirmButton = { TextButton(onClick = { busy = true; scope.launch {
             try { repository.eraseAll(); selected = null; selectedId = null; form = false; snapshot = null; captureEnabled = false; notifications = true; error = null }
             catch (_: Exception) { error = "Erasure did not fully finish. Capture is off; retry before re-enabling it." }
@@ -607,6 +754,7 @@ private fun friendlyFilter(value: String): String = when (value) {
 }
 
 internal fun repaymentSummary(row: TransactionEntity, reversedOriginalIds: Set<String> = emptySet()): Pair<String, Long>? {
+    if (!row.repaymentExpected || row.duplicateOfId != null) return null
     if (row.ownership !in listOf("ForOther", "Group") || row.direction != "Debit" || row.amountMinor == null) return null
     if (row.status in listOf("Failed", "Reversed") || row.transactionType in listOf("SelfTransfer", "CardRepayment", "Refund", "Reversal") || row.id in reversedOriginalIds) return null
     val personal = row.personalShareMinor ?: row.amountMinor
@@ -622,7 +770,7 @@ private fun transactionLabels(row: TransactionEntity): String? = buildList {
 }.joinToString(" · ").ifBlank { null }
 
 @Composable
-private fun LedgerNavigation(destination: String, onNavigate: (String) -> Unit) {
+internal fun LedgerNavigation(destination: String, onNavigate: (String) -> Unit) {
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         LedgerNavigationButton("Overview", destination, "Open overview", onNavigate, Modifier.weight(1f))
@@ -638,7 +786,13 @@ private fun LedgerNavigationButton(label: String, destination: String, descripti
         colors = ButtonDefaults.textButtonColors(
             contentColor = if (destination == label) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             containerColor = if (destination == label) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent)) {
-        Text(label)
+        Text(
+            text = label,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
 

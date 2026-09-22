@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:gravity="center_vertical"
+    android:padding="16dp" android:background="@drawable/widget_background">
+    <TextView android:id="@+id/widget_title" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Finance Ministry" android:textStyle="bold" android:textColor="#182923" android:textSize="14sp" />
+    <TextView android:id="@+id/widget_summary" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="5dp" android:text="Quick add" android:textColor="#182923" android:textSize="16sp" />
+    <TextView android:id="@+id/widget_updated" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="2dp" android:text="Amounts stay private by default" android:textColor="#52635B" android:textSize="11sp" />
+    <Button android:id="@+id/widget_add" android:layout_width="match_parent" android:layout_height="48dp"
+        android:layout_marginTop="8dp" android:text="+ Add transaction" android:textAllCaps="false" />
+</LinearLayout>

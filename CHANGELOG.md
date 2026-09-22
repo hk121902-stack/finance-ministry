@@ -4,6 +4,27 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.1.0-alpha.13
+
+- Add dated repayment history with partial cash or linked incoming repayments,
+  explicit repayment-expected handling, gifts/treats, person/group summaries and
+  separate all-time versus selected-month amounts owed.
+- Add password-encrypted local backup and atomic replace restore, restore preview,
+  CSV report export, and portable coverage for transactions, sources, rules,
+  repayment history, match decisions, budgets and reminders.
+- Add conservative Possible matches review for duplicate records and own-account
+  transfers. Decisions keep both records, preserve an audit trail and can be undone.
+- Add remembered merchant category rules, conflict review and explicit selected-row
+  batch cleanup with previews and undo.
+- Add a personal-share spending breakdown with fair prior-period comparison,
+  category drill-down, a separate refunds-received subtotal and category budgets.
+- Add Capture health diagnostics that distinguish SMS permission, capture,
+  notifications and only the recording errors the app actually observed.
+- Add optional local category budgets, monthly payment reminders that never pay or
+  record automatically, and a privacy-first home-screen quick-add widget.
+- Add formal Room schema 4→7 migration verification and bounded possible-match
+  scanning for large imported histories.
+
 ## 0.1.0-alpha.12
 
 - Refine the ledger into the approved Quiet Ledger presentation with calmer

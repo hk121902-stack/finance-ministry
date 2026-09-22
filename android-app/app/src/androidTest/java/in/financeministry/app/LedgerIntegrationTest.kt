@@ -438,6 +438,24 @@ class LedgerIntegrationTest {
         } finally { repository.eraseAll(); repository.close() }
     }
 
+    @Test fun selected_month_outstanding_is_separate_from_all_date_balance() = runBlocking {
+        val repository = TransactionRepository(context, namespace())
+        val zone = java.time.ZoneId.systemDefault()
+        val september = java.time.LocalDate.of(2026, 9, 1)
+        fun timestamp(date: java.time.LocalDate) = date.atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+        try {
+            repository.save(input().copy(amount = "100.00", timestamp = timestamp(september.plusDays(14)),
+                ownership = SpendingOwnership.Group, groupLabel = "Trip", personalShare = "25.00", repaid = "10.00"))
+            repository.save(input().copy(amount = "50.00", timestamp = timestamp(september.minusMonths(1).plusDays(14)),
+                ownership = SpendingOwnership.ForOther, repaid = "20.00"))
+
+            val result = repository.snapshot(today = september)
+
+            assertEquals("9500", result.outstandingRepayments.toString())
+            assertEquals("6500", result.selectedMonthOutstandingRepayments.toString())
+        } finally { repository.eraseAll(); repository.close() }
+    }
+
     @Test fun payment_sources_can_be_updated_and_retired_without_breaking_existing_transactions() = runBlocking {
         val repository = TransactionRepository(context, namespace())
         try {

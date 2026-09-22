@@ -104,6 +104,7 @@ class LedgerUxTest {
         rule.waitUntil(15000) { rule.onAllNodesWithText("Money out · month").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithText("Whole month").assertIsDisplayed()
         rule.onNodeWithText("Still owed to you").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Outstanding from selected month").assertIsDisplayed()
     }
 
     @Test fun settings_are_separate_and_return_to_home() {

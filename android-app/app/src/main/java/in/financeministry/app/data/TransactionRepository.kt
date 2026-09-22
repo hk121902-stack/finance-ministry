@@ -22,6 +22,7 @@ data class LedgerSnapshot(val rows: List<TransactionEntity>, val debit: BigInteg
     val dailyDebit: BigInteger = BigInteger.ZERO, val dailyCredit: BigInteger = BigInteger.ZERO,
     val hasOlder: Boolean = false, val personalSpend: BigInteger = BigInteger.ZERO,
     val paidForOthers: BigInteger = BigInteger.ZERO, val outstandingRepayments: BigInteger = BigInteger.ZERO,
+    val selectedMonthOutstandingRepayments: BigInteger = BigInteger.ZERO,
     val selectedMonth: LocalDate = LocalDate.now().withDayOfMonth(1),
     val reversedOriginalIds: Set<String> = emptySet(),
     val resultCount: Long = 0, val resultDebit: BigInteger = BigInteger.ZERO,
@@ -38,9 +39,21 @@ class TransactionRepository(private val context: Context, private val namespace:
     val eraseGeneration = MutableStateFlow(0L)
     private val parser = RuleBasedFinancialSmsParser()
     private var importEpoch = UUID.randomUUID().toString()
-    private fun db(): FinanceDatabase = database ?: FinanceDatabase.open(context,
-        secrets.databasePassphrase(context.getDatabasePath(dbName).exists()), dbName).also { database = it }
+    internal var batchEpoch = UUID.randomUUID().toString()
+    internal var pendingBackupDigest: String? = null
+    internal var pendingBackupRevision: Long? = null
+    internal var pendingBackupFileDigest: String? = null
+    internal val applicationContext get() = context
+    internal val isMainLedger get() = namespace == "finance"
+    private fun db(): FinanceDatabase {
+        val result = database ?: FinanceDatabase.open(context,
+            secrets.databasePassphrase(context.getDatabasePath(dbName).exists()), dbName).also { database = it }
+        applyPendingRestoreSettings(result)
+        return result
+    }
     private suspend fun <T> locked(block: suspend () -> T): T = withContext(Dispatchers.IO) { mutex.withLock { block() } }
+    internal suspend fun <T> withLedger(block: (FinanceDatabase) -> T): T = locked { block(db()) }
+    internal fun invalidateImportPreviews() { importEpoch = UUID.randomUUID().toString(); batchEpoch = UUID.randomUUID().toString() }
 
     suspend fun snapshot(offset: Int = 0, filter: String = "All", today: LocalDate = LocalDate.now(),
         currentDay: LocalDate = today, search: String = ""): LedgerSnapshot = locked {
@@ -63,8 +76,8 @@ class TransactionRepository(private val context: Context, private val namespace:
         val dayStart = currentDay.atStartOfDay(zone).toInstant().toEpochMilli()
         val dayEnd = currentDay.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val reversedOriginals = db().transactions().reversedOriginals().toSet()
-        fun eligible(row: TransactionEntity, daily: Boolean = false) = row.id !in reversedOriginals && (!daily || row.effectiveTimestamp in dayStart until dayEnd) && row.status == TransactionStatus.Successful.name &&
-            row.reviewState != ReviewState.NeedsReview.name && row.transactionType !in listOf(TransactionType.SelfTransfer.name, TransactionType.CardRepayment.name) && row.ownership != SpendingOwnership.SelfTransfer.name
+        fun eligible(row: TransactionEntity, daily: Boolean = false) = RepaymentAccounting.eligible(row, reversedOriginals) &&
+            (!daily || row.effectiveTimestamp in dayStart until dayEnd)
         fun sum(direction: Direction, daily: Boolean = false) = rows.filter { eligible(it, daily) && it.direction == direction.name &&
             true }
             .fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf(row.amountMinor ?: 0) }
@@ -75,14 +88,16 @@ class TransactionRepository(private val context: Context, private val namespace:
             categories.isEmpty(), categories, sourceIds.isEmpty(), sourceIds, normalizedSearch)
         val resultTotals = db().transactions().filteredTotals(purpose, origin, direction, filter == "Review", monthStart, monthEnd,
             categories.isEmpty(), categories, sourceIds.isEmpty(), sourceIds, normalizedSearch)
-        fun personal(row: TransactionEntity): Long = row.personalShareMinor ?: row.amountMinor ?: 0
-        fun owed(row: TransactionEntity): Long = ((row.amountMinor ?: 0) - personal(row) - row.repaidMinor).coerceAtLeast(0)
+        fun personal(row: TransactionEntity): Long = RepaymentAccounting.personal(row)
+        fun owed(row: TransactionEntity): Long = RepaymentAccounting.owed(row)
         val eligibleDebits = rows.filter { eligible(it) && it.direction == Direction.Debit.name }
         LedgerSnapshot(page.take(100), sum(Direction.Debit), sum(Direction.Credit),
             sum(Direction.Debit, true), sum(Direction.Credit, true), page.size > 100,
             eligibleDebits.fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf(personal(row)) },
             eligibleDebits.filter { it.ownership in listOf("ForOther", "Group") }.fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf((row.amountMinor ?: 0) - personal(row)) },
             db().transactions().repaymentCandidates().filter { eligible(it) && it.direction == Direction.Debit.name }
+                .fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf(owed(row)) },
+            eligibleDebits.filter { it.ownership in listOf("ForOther", "Group") }
                 .fold(BigInteger.ZERO) { total, row -> total + BigInteger.valueOf(owed(row)) }, month, reversedOriginals,
             resultTotals.count, BigInteger.valueOf(resultTotals.debit), BigInteger.valueOf(resultTotals.credit))
     }
@@ -128,6 +143,7 @@ class TransactionRepository(private val context: Context, private val namespace:
     suspend fun deletePaymentSource(id: String) = locked { db().transactions().retireSource(id); revision.value++ }
     suspend fun updateTransactionPaymentSource(transactionId: String, sourceId: String): TransactionEntity = locked {
         val dao = db().transactions()
+        require(!dao.hasActiveFinancialMatch(transactionId)) { "Undo the match decision in Review before editing this transaction." }
         val old = requireNotNull(dao.get(transactionId)) { "This transaction no longer exists." }
         val source = requireNotNull(dao.source(sourceId)) { "Choose an available payment source." }
         require(source.active) { "Choose an active payment source." }
@@ -155,6 +171,9 @@ class TransactionRepository(private val context: Context, private val namespace:
         context.checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
 
     fun historyPermissionGranted(): Boolean = context.checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+    suspend fun restoredHistoryNeedsReview(): Boolean = locked {
+        (database != null || context.getDatabasePath(dbName).exists()) && db().transactions().metadata("foreign_restore") == "true"
+    }
 
     suspend fun previewImport(source: HistoricalSmsSource = AndroidHistoricalSmsSource(context), now: Long = System.currentTimeMillis(),
         progress: (Int) -> Unit = {}): ImportPreview = withContext(Dispatchers.IO) {
@@ -181,7 +200,8 @@ class TransactionRepository(private val context: Context, private val namespace:
                     if (keys.any { it in seen } || dao?.hasFingerprint(primary) == true || dao?.hasFingerprint(alternate) == true) duplicates++
                     else {
                         check(candidates.size < 5000) { "Too many transactions to preview safely. Nothing was imported." }
-                        val review = parsed.decision == ParseDecision.NeedsReview || parsed.transactionType in listOf(TransactionType.Refund, TransactionType.Reversal)
+                        val review = parsed.decision == ParseDecision.NeedsReview || parsed.transactionType in listOf(TransactionType.Refund, TransactionType.Reversal) ||
+                            dao?.metadata("foreign_restore") == "true"
                         val row = TransactionEntity(UUID.randomUUID().toString(), primary, SourceType.SMS.name, message.date, message.date,
                             parsed.amountMinor, parsed.currency, parsed.direction.name, parsed.status.name, parsed.channel.name,
                             parsed.transactionType.name, parsed.counterpartyLabel, parsed.maskedAccountHint,
@@ -215,7 +235,9 @@ class TransactionRepository(private val context: Context, private val namespace:
                     if (dao.hasFingerprint(candidate.row.sourceFingerprint!!) || dao.hasFingerprint(candidate.alternateFingerprint)) duplicates++
                     else {
                         val mapped = mappedSourceId(candidate.row.channel, candidate.row.maskedAccountHint, candidate.transientSender, dao)
-                        if (dao.insert(candidate.row.copy(importBatchId = batchId, paymentSourceId = mapped)) != -1L) inserted++ else duplicates++
+                        val imported = candidate.row.copy(importBatchId = batchId, paymentSourceId = mapped,
+                            reviewState = if (dao.metadata("foreign_restore") == "true") "NeedsReview" else candidate.row.reviewState)
+                        if (dao.insert(CategoryRules.apply(imported, dao.rules())) != -1L) inserted++ else duplicates++
                     }
                 }
                 operation.ensureActive()
@@ -233,7 +255,7 @@ class TransactionRepository(private val context: Context, private val namespace:
     suspend fun undoImport(batchId: String): Int = locked {
         if (database == null && !context.getDatabasePath(dbName).exists()) return@locked 0
         val dao = db().transactions()
-        val rows = dao.untouchedImport(batchId)
+        val rows = dao.untouchedImport(batchId).filter { dao.repaymentsFor(it.id).isEmpty() && dao.allocationsFrom(it.id).isEmpty() }
         db().runInTransaction {
             rows.forEach { dao.unlinkFrom(it.id); dao.delete(it.id) }
             dao.deleteBatch(batchId)
@@ -263,6 +285,7 @@ class TransactionRepository(private val context: Context, private val namespace:
         }
         val dao = db().transactions()
         row = row.copy(paymentSourceId = mappedSourceId(row.channel, row.maskedAccountHint, sms.sender, dao))
+        row = CategoryRules.apply(row, dao.rules())
         var inserted = false
         db().runInTransaction {
             val adjustment = row.transactionType in listOf("Refund", "Reversal")
@@ -284,16 +307,19 @@ class TransactionRepository(private val context: Context, private val namespace:
             inserted = dao.insert(row) != -1L
         }
         if (!inserted) return@locked false
+        preferences.edit().putLong("last_capture_at", now).apply()
         revision.value++
         // Insertion is committed. Notification failure must never roll it back; erase cannot race posting.
         try { onSaved(row) } catch (_: Exception) { /* OS notification availability is independent of capture. */ }
         true
     }
 
-    suspend fun save(input: ManualInput, id: String? = null, newId: String = UUID.randomUUID().toString()): String = locked {
+    suspend fun save(input: ManualInput, id: String? = null, newId: String = UUID.randomUUID().toString(),
+        rememberedRule: RememberCategoryRule? = null): String = locked {
         input.validate()
         val dao = db().transactions()
         val old = id?.let { requireNotNull(dao.get(it)) { "This transaction no longer exists." } }
+        require(old == null || !dao.hasActiveFinancialMatch(old.id)) { "Undo the match decision in Review before editing this transaction." }
         input.paymentSourceId?.let { sourceId ->
             val source = requireNotNull(dao.source(sourceId)) { "Choose an available payment source." }
             require(source.channel == input.channel.name) { "The payment source does not support this payment method." }
@@ -310,8 +336,11 @@ class TransactionRepository(private val context: Context, private val namespace:
             isUserCorrected = old != null, createdAt = old?.createdAt ?: now, updatedAt = now, importBatchId = old?.importBatchId,
             referenceHash = old?.referenceHash, linkedOriginalId = old?.linkedOriginalId,
             category = input.category.trim(), ownership = input.normalizedOwnership().name,
-            groupLabel = input.groupLabel.trim().takeIf { input.normalizedOwnership() == SpendingOwnership.Group && it.isNotBlank() }, personalShareMinor = input.personalShareMinor(),
-            repaidMinor = input.repaidMinor(), paymentSourceId = input.paymentSourceId)
+            groupLabel = input.groupLabel.trim().takeIf { input.normalizedOwnership() in setOf(SpendingOwnership.Group, SpendingOwnership.ForOther) && it.isNotBlank() }, personalShareMinor = input.personalShareMinor(),
+            repaidMinor = input.repaidMinor(), paymentSourceId = input.paymentSourceId,
+            repaymentExpected = input.repaymentExpected, duplicateOfId = old?.duplicateOfId, categoryNeedsReview = false)
+        if (old != null) validateRepaymentEdit(dao, old, row)
+        val rule = rememberedRule?.let { buildRememberedRule(dao, row, it) }
         db().runInTransaction {
             if (old == null) dao.insert(row) else {
                 val linkSensitiveTypes = setOf("Refund", "Reversal", "SelfTransfer", "CardRepayment")
@@ -329,12 +358,15 @@ class TransactionRepository(private val context: Context, private val namespace:
                     "status" to r.status, "channel" to r.channel, "transactionType" to r.transactionType, "effectiveTimestamp" to r.effectiveTimestamp.toString(),
                     "counterpartyLabel" to r.counterpartyLabel, "maskedAccountHint" to r.maskedAccountHint, "userNotes" to r.userNotes, "reviewState" to r.reviewState,
                     "category" to r.category, "ownership" to r.ownership, "groupLabel" to r.groupLabel,
-                    "personalShareMinor" to r.personalShareMinor?.toString(), "repaidMinor" to r.repaidMinor.toString(), "paymentSourceId" to r.paymentSourceId)
+                    "personalShareMinor" to r.personalShareMinor?.toString(), "repaidMinor" to r.repaidMinor.toString(), "paymentSourceId" to r.paymentSourceId,
+                    "repaymentExpected" to r.repaymentExpected.toString())
                 val before = fields(old)
                 dao.update(row)
                 dao.audit(fields(row).filter { (key, value) -> before[key] != value }.map { (key, value) ->
                     CorrectionEntity(UUID.randomUUID().toString(), row.id, now, key, before[key], value) })
             }
+            syncLegacyRepayment(dao, row)
+            rule?.let(dao::saveRule)
         }
         revision.value++
         row.id
@@ -342,42 +374,55 @@ class TransactionRepository(private val context: Context, private val namespace:
 
     /** Labels never confirm a payment or change its parsed financial fields. */
     suspend fun classify(id: String, category: String, ownership: SpendingOwnership,
-        group: String = "", share: String = "", repaid: String = "") = locked {
+        group: String = "", share: String = "", repaid: String = "", repaymentExpected: Boolean = true,
+        rememberedRule: RememberCategoryRule? = null) = locked {
         val dao = db().transactions()
         val old = requireNotNull(dao.get(id)) { "This transaction no longer exists." }
+        require(!dao.hasActiveFinancialMatch(id)) { "Undo the match decision in Review before editing this transaction." }
         val amount = requireNotNull(old.amountMinor) { "Review the amount first using Edit all details." }
         val input = ManualInput(java.math.BigDecimal.valueOf(amount, 2).toPlainString(), Direction.Debit,
             old.effectiveTimestamp, TransactionType.Other, category = category, ownership = ownership,
-            groupLabel = group, personalShare = share, repaid = repaid)
+            groupLabel = group, personalShare = share, repaid = repaid, repaymentExpected = repaymentExpected)
         input.validate()
         val now = System.currentTimeMillis()
         val type = if (ownership == SpendingOwnership.SelfTransfer) "SelfTransfer"
             else if (old.transactionType == "SelfTransfer") "Other" else old.transactionType
         val row = old.copy(category = category.trim(), ownership = ownership.name,
-            groupLabel = group.trim().takeIf { ownership == SpendingOwnership.Group },
+            groupLabel = group.trim().takeIf { ownership in setOf(SpendingOwnership.Group, SpendingOwnership.ForOther) && it.isNotBlank() },
             personalShareMinor = input.personalShareMinor(), repaidMinor = input.repaidMinor(),
+            repaymentExpected = repaymentExpected, categoryNeedsReview = false,
             transactionType = type, linkedOriginalId = old.linkedOriginalId.takeIf { type == old.transactionType },
             isUserCorrected = true, updatedAt = now)
         fun fields(r: TransactionEntity) = mapOf("category" to r.category, "ownership" to r.ownership,
             "groupLabel" to r.groupLabel, "personalShareMinor" to r.personalShareMinor?.toString(),
-            "repaidMinor" to r.repaidMinor.toString(), "transactionType" to r.transactionType)
+            "repaidMinor" to r.repaidMinor.toString(), "transactionType" to r.transactionType,
+            "repaymentExpected" to r.repaymentExpected.toString())
+        validateRepaymentEdit(dao, old, row)
+        val rule = rememberedRule?.let { buildRememberedRule(dao, row, it) }
         db().runInTransaction {
             if (type != old.transactionType) dao.unlinkFrom(id)
             dao.update(row)
             val before = fields(old)
             dao.audit(fields(row).filter { (key, value) -> before[key] != value }.map { (key, value) ->
                 CorrectionEntity(UUID.randomUUID().toString(), id, now, key, before[key], value) })
+            syncLegacyRepayment(dao, row)
+            rule?.let(dao::saveRule)
         }
         revision.value++
     }
 
     suspend fun delete(id: String) = locked {
+        require(!db().transactions().hasActiveFinancialMatch(id)) { "Undo this transaction's match decision before deleting it. Both payment records must stay available." }
+        require(db().transactions().repaymentsFor(id).isEmpty() && db().transactions().allocationsFrom(id).isEmpty()) {
+            "Remove repayment links before deleting this transaction. Incoming payments are kept when unlinked."
+        }
         db().runInTransaction { db().transactions().unlinkFrom(id); db().transactions().delete(id) }
         context.getSystemService(NotificationManager::class.java).cancel(id, 1)
         revision.value++
     }
 
     suspend fun eraseAll() = locked {
+        pendingBackupDigest = null; pendingBackupRevision = null; pendingBackupFileDigest = null
         importEpoch = UUID.randomUUID().toString()
         eraseGeneration.value++
         // Disable capture before deletion; queued broadcasts recheck it inside this same mutex.
@@ -388,6 +433,7 @@ class TransactionRepository(private val context: Context, private val namespace:
         secrets.erase()
         if (namespace == "finance") context.getSystemService(NotificationManager::class.java).cancelAll()
         if (namespace == "finance") `in`.financeministry.app.sms.ReviewReminder.cancel(context)
+        if (namespace == "finance") `in`.financeministry.app.sms.RecurringPaymentReminder.cancel(context)
         revision.value++
     }
 

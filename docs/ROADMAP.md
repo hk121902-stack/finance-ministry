@@ -8,6 +8,9 @@ This is a direction of travel, not a dated delivery commitment.
 - Encrypted local ledger, review states and duplicate detection.
 - Manual transactions, corrections, basic filters and monthly totals.
 - Native saved-record notifications with View/Edit.
+- Dated repayment tracking, encrypted backup/restore and CSV reports.
+- Conservative duplicate/transfer suggestions, category rules and batch cleanup.
+- Spending insights, capture-health diagnostics and optional budgets/reminders/widget.
 
 ## Before general use
 
@@ -34,8 +37,8 @@ human validation; synthetic tests are not a measured bank-template accuracy scor
 
 GitHub debug APKs are the alpha distribution channel. Play Store distribution is a
 separate decision and review gate, not a prerequisite claimed for this GitHub alpha.
-Backup/export remains a separate scope decision; the current loss-risk disclosure
-stays mandatory. Optional last-three-month SMS import is now an approved local
+Password-encrypted backup/restore and CSV reporting are available locally; broader
+cross-device and physical-device validation remains mandatory. Optional last-three-month SMS import is now an approved local
 addition in alpha.5: preview/confirm, separate permission and batch undo.
 Physical-device permission and inbox-provider validation remain required. Cloud sync,
 messenger integrations and financial-service integrations remain out of scope.
@@ -109,8 +112,8 @@ Home/Settings, recorded summaries, date-grouped history, simpler manual entry,
 native date/time pickers, clearer review prompts, light/dark colours and unsaved-edit
 protection. Existing 100-record paging remains; progressive loading, field-level
 validation polish and measured under-15-second add/edit usability remain follow-ups.
-Parser reliability issues above are still open. An optional home-screen quick-add
-widget comes later; financial summaries require an explicit privacy choice.
+Parser reliability issues above are still open. The optional home-screen quick-add
+widget now defaults to no amounts; its financial summary requires explicit privacy consent.
 
 - Expand synthetic parser regressions and human-reviewed accuracy evaluation.
 - Validate Redmi and other physical devices, OEM background behavior and multipart SMS.
@@ -119,7 +122,7 @@ widget comes later; financial summaries require an explicit privacy choice.
 - Add older-history navigation and clearer daily/monthly summaries.
 - Expand lifecycle/fault-injection coverage beyond the verified single-process capture, edit and erasure races.
 - Establish non-destructive database migrations and test release-to-release upgrades.
-- Decide on backup/export and recovery before users rely on a long-lived ledger.
+- Validate backup/restore and widget behavior on physical OEM devices before general use.
 - Harden a non-debug production build and decide its distribution/signing strategy.
 
 ## Collaboration

@@ -24,7 +24,11 @@ class SmsReceiver : BroadcastReceiver() {
                     // Framework order is the multipart order; segment timestamps can differ.
                     check(parts.all { it.originatingAddress == first.originatingAddress })
                     val sms = IncomingSms(first.originatingAddress ?: "", first.timestampMillis, parts.joinToString("") { it.messageBody ?: "" })
-                    runBlocking { repository.ingest(sms) { TransactionNotifications.post(context, it, repository.preferences.getBoolean("notifications", true)) } }
+                    val inserted = runBlocking { repository.ingest(sms) { TransactionNotifications.post(context, it, repository.preferences.getBoolean("notifications", true)) } }
+                    if (inserted) runBlocking {
+                        BudgetAlerts.evaluate(context, repository)
+                        `in`.financeministry.app.widget.FinanceWidget.updateAll(context)
+                    }
                 } catch (_: Exception) {
                     repository.preferences.edit().putBoolean("capture_error", true).apply()
                 } finally { pending.finish() }

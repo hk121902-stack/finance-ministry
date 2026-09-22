@@ -14,6 +14,17 @@ val alphaKeystore = providers.environmentVariable("FM_ALPHA_KEYSTORE").orNull
 val requireAlphaSigning = providers.environmentVariable("FM_REQUIRE_ALPHA_SIGNING").orNull == "true"
 check(!requireAlphaSigning || !alphaKeystore.isNullOrBlank()) { "Official alpha builds require the persistent signing keystore." }
 
+// Room 2.8's migration-test serializers require a matching serialization runtime.
+// Compose/lifecycle otherwise pins core 1.7.3 while Room brings json 1.8.1.
+configurations.matching { it.name.endsWith("AndroidTestRuntimeClasspath") }.configureEach {
+    resolutionStrategy.force(
+        "org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1",
+        "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.8.1",
+        "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1",
+        "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.8.1",
+    )
+}
+
 android {
     namespace = "in.financeministry.app"
     compileSdk = 37
@@ -81,6 +92,7 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.room.testing)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

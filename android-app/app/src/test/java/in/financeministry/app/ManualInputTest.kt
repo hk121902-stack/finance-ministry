@@ -7,6 +7,17 @@ import org.junit.Test
 
 class ManualInputTest {
     private fun input(amount: String) = ManualInput(amount, Direction.Debit, 1700000000000, TransactionType.Other)
+    @Test fun gifts_count_fully_without_creating_a_repayment_balance() {
+        val gift = input("3000").copy(ownership = SpendingOwnership.Group, groupLabel = "Birthday",
+            personalShare = "1000", repaymentExpected = false)
+        gift.validate()
+        assertEquals(300000L, gift.personalShareMinor())
+        assertEquals(0L, gift.repaidMinor())
+        assertThrows(IllegalArgumentException::class.java) { gift.copy(repaid = "500").validate() }
+        val treat = gift.copy(ownership = SpendingOwnership.ForOther, groupLabel = "")
+        treat.validate()
+        assertEquals(300000L, treat.personalShareMinor())
+    }
     @Test fun family_bears_the_full_cost_without_repayment_tracking() {
         val family = input("2000").copy(ownership = SpendingOwnership.valueOf("Family"),
             personalShare = "100", repaid = "500")

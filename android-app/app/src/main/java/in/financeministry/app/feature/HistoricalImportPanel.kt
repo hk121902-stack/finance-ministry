@@ -37,6 +37,7 @@ private fun ImportPanelContent(repository: TransactionRepository, source: Histor
     var disclosure by remember { mutableStateOf(false) }
     var undo by remember { mutableStateOf(false) }
     var lastBatch by remember { mutableStateOf<ImportBatchEntity?>(null) }
+    var restoredHistory by remember { mutableStateOf(false) }
     val dateFormat = remember { DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.systemDefault()) }
     fun date(value: Long) = dateFormat.format(Instant.ofEpochMilli(value))
     fun scan() {
@@ -56,10 +57,12 @@ private fun ImportPanelContent(repository: TransactionRepository, source: Histor
     }
     LaunchedEffect(revision) {
         try { lastBatch = repository.latestImport() } catch (_: Exception) { lastBatch = null }
+        try { restoredHistory = repository.restoredHistoryNeedsReview() } catch (_: Exception) { restoredHistory = true }
     }
     HorizontalDivider()
     Text("Past transactions", style = MaterialTheme.typography.titleMedium)
     Text("Optionally scan SMS still on this phone from the last three calendar months. Nothing is uploaded; original SMS are never changed.")
+    if (restoredHistory) Text("A backup from another installation was restored. Its old SMS matching keys cannot move between installations, so new historical imports need review. Check for duplicates before confirming them.", style = MaterialTheme.typography.bodySmall)
     OutlinedButton(onClick = { disclosure = true }, enabled = !busy) { Text("Import last 3 months") }
     if (busy) {
         LinearProgressIndicator(Modifier.fillMaxWidth())

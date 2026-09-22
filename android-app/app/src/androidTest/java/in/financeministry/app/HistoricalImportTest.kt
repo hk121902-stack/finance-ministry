@@ -20,6 +20,45 @@ class HistoricalImportTest {
     private fun grant() = InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.READ_SMS)
     private fun source(vararg rows: HistoricalSms) = HistoricalSmsSource { _, emit -> rows.forEach { emit(it) } }
 
+    @Test fun portable_restore_requires_review_before_reimport_can_change_totals() = runBlocking {
+        grant()
+        val first = repository()
+        val second = repository()
+        val now = System.currentTimeMillis()
+        val sms = HistoricalSms("TEST", now - 1000, 0, "INR 42 debited via UPI")
+        val password = "test-only-password-long".toCharArray()
+        try {
+            first.commitImport(first.previewImport(source(sms), now))
+            val backup = first.createEncryptedBackup(password)
+            second.restoreBackup(second.previewBackup(backup, password), protectCurrent = false)
+            assertTrue(second.restoredHistoryNeedsReview())
+            val preview = second.previewImport(source(sms), now)
+            assertEquals(0, preview.ready)
+            assertEquals(1, preview.needsReview)
+            second.commitImport(preview)
+            assertEquals("4200", second.snapshot().debit.toString())
+            assertEquals(1, second.previewImport(source(sms), now).duplicates)
+            val onward = BackupCipher.decrypt(second.createEncryptedBackup(password), password)
+            assertTrue(org.json.JSONObject(onward.toString(Charsets.UTF_8)).getBoolean("fingerprintHistoryRequiresReview"))
+            onward.fill(0)
+        } finally { password.fill('\u0000'); first.eraseAll(); first.close(); second.eraseAll(); second.close() }
+    }
+
+    @Test fun undo_import_keeps_an_incoming_payment_used_by_repayment_history() = runBlocking {
+        grant()
+        val r = repository()
+        val now = System.currentTimeMillis()
+        try {
+            val result = r.commitImport(r.previewImport(source(HistoricalSms("TEST", now - 1000, 0, "INR 500 credited via UPI")), now))
+            val credit = r.snapshot().rows.single()
+            val expense = r.save(ManualInput("1000", Direction.Debit, now, TransactionType.Other, ownership = SpendingOwnership.ForOther))
+            r.recordRepayment(expense, "250", credit.effectiveTimestamp, "Dinner", credit.id)
+            assertEquals(0, r.undoImport(result.batchId))
+            assertNotNull(r.get(credit.id))
+            assertEquals(25000L, r.get(expense)!!.repaidMinor)
+        } finally { r.eraseAll(); r.close() }
+    }
+
     @Test fun permission_denial_never_reads_source() = runBlocking {
         val denied = object : android.content.ContextWrapper(context) {
             override fun checkSelfPermission(permission: String): Int = android.content.pm.PackageManager.PERMISSION_DENIED
