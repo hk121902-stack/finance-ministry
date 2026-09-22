@@ -94,8 +94,10 @@ jobs:
           set -euo pipefail
           printf '%s\n' "Debug alpha $VERSION for testing; not ready for general use." '' \
             'Download the APK asset. See README for setup and permission instructions.' '' \
-            'Install over a previous official alpha to update. Do not uninstall an important ledger: there is no backup or restore.' '' \
-            'JVM tests, lint and assembly passed in this release run. Physical-device verification is still pending.' '' \
+            'Highlights: repayment tracking, personal-share insights, conservative duplicate/transfer review, category rules, batch cleanup, capture health, budgets, reminders and an opt-in quick-add widget.' '' \
+            'Password-encrypted backup/restore and CSV export are available. Keep the backup password safe; the app cannot recover it.' '' \
+            'Install over a previous official alpha to update. Back up an important ledger before updating or replacing data.' '' \
+            'JVM tests, lint and assembly passed in this signed release run. Android 16 emulator validation passed; physical-device verification is still pending.' '' \
             "Source commit: $GITHUB_SHA" > "$RUNNER_TEMP/release-notes.md"
           gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "Finance Ministry $VERSION (debug alpha)" \
             --draft --prerelease --notes-file "$RUNNER_TEMP/release-notes.md"
