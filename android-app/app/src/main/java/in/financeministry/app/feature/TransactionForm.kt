@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import `in`.financeministry.app.core.model.*
@@ -55,6 +56,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.86f).dp
     val initialFields = rememberSaveable(existing?.id) { listOf(amount, direction, status, type, channel, date, label, notes, hint, category, ownership, groupLabel, personalShare, repaid, sourceId, repaymentExpected.toString()) }
     val dirty = rememberCategory || initialFields != listOf(amount, direction, status, type, channel, date, label, notes, hint, category, ownership, groupLabel, personalShare, repaid, sourceId, repaymentExpected.toString())
     SideEffect { onDirtyChange(dirty) }
@@ -63,9 +65,15 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     var discard by remember { mutableStateOf(false) }
     val leave = { if (!busy) { if (dirty) discard = true else onDone() }; Unit }
     BackHandler { leave() }
-    Column(Modifier.fillMaxWidth().imePadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxWidth().height(maxSheetHeight).navigationBarsPadding().imePadding().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
       Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(if (compact) "Categorize transaction" else if (existing == null) "Add transaction" else "Edit / confirm transaction", style = MaterialTheme.typography.titleLarge)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text(if (compact) "Categorize transaction" else if (existing == null) "Add transaction" else "Edit / confirm transaction",
+                style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            if (!compact && !detailsExpanded) TextButton(onClick = { detailsExpanded = true }) { Text("More details") }
+        }
         if (compact && existing != null) {
             Text("${`in`.financeministry.app.money(existing.amountMinor)} · ${existing.counterpartyLabel ?: friendly(existing.direction)}", style = MaterialTheme.typography.titleMedium)
             if (existing.reviewState == "NeedsReview") Text("Still needs review. Saving labels will not confirm the payment.", style = MaterialTheme.typography.bodySmall)
@@ -80,7 +88,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
             }
         }
         if (direction == "Unknown") Text("Choose money out, money in, or transfer.", color = MaterialTheme.colorScheme.error)
-        OutlinedTextField(label, { label = it.take(60); if (label.trim().length < 2) rememberCategory = false }, label = { Text("Merchant or short label (optional)") }, supportingText = { Text("A short description, not personal or account details.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(label, { label = it.take(60); if (label.trim().length < 2) rememberCategory = false }, label = { Text("Merchant or short label (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }
         Choice("Category", category, transactionCategories) { category = it }
         if (existing?.categoryNeedsReview == true) Text("Conflicting rules matched this payment. Choose its category; the payment's financial status is unchanged.", style = MaterialTheme.typography.bodySmall)
@@ -117,7 +125,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
             }
             if (!repaymentExpected) Text("The full payment counts as your spending. No money is owed back.", style = MaterialTheme.typography.bodySmall)
         }
-        Text(when {
+        if (ownership != "Personal" && ownership != "Family") Text(when {
             !repaymentExpected && ownership in listOf("ForOther", "Group") -> "Gift or treat · full amount counts as your spending."
             else -> when (ownership) {
             "Group" -> "Only your share counts as your spending. The remainder is owed by others."
@@ -140,9 +148,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         }
         if (compact) TextButton(onClick = { compact = false }) { Text("Edit all details") }
         if (!compact) {
-        if (!detailsExpanded) {
-            TextButton(onClick = { detailsExpanded = true }) { Text("More details · date, source and notes") }
-        } else {
+        if (detailsExpanded) {
         val selectedDate = LocalDateTime.parse(date, formatter)
         TextButton(onClick = {
             android.app.DatePickerDialog(context, pickerTheme, { _, year, month, day ->

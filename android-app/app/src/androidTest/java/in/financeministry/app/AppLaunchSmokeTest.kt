@@ -14,6 +14,6 @@ class AppLaunchSmokeTest {
     @Test
     fun launchRendersPrivateAlphaShell() {
         activityRule.onNodeWithContentDescription("Open overview").assertIsDisplayed()
-        activityRule.onNodeWithText("+ Add transaction").assertIsDisplayed()
+        activityRule.onNodeWithContentDescription("Add transaction").assertIsDisplayed()
     }
 }

@@ -18,9 +18,11 @@ class CategoryAndBatchUiTest {
             r.save(ManualInput("25", Direction.Debit, System.currentTimeMillis(), TransactionType.Other, label = label)) } }
         try {
             rule.onNodeWithContentDescription("Open transactions").performClick()
-            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Select transactions"))
-            rule.onNodeWithText("Select transactions").performClick()
+            rule.onNodeWithText("Select").performClick()
+            rule.onNodeWithText("Select transactions").assertDoesNotExist()
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Select Batch first"))
             rule.onNodeWithContentDescription("Select Batch first").performClick()
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Select Batch second"))
             rule.onNodeWithContentDescription("Select Batch second").performClick()
             rule.onNodeWithText("Category").performClick()
             rule.onNodeWithText("Batch category: Other").performClick()

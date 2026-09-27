@@ -97,15 +97,24 @@ fun BackupPanel(repository: TransactionRepository, month: LocalDate, onBusyChang
         if (uri == null) message = "Restore cancelled. Your ledger is unchanged."
         else { restoreUri = uri.toString(); passwordAction = "restore"; preview = null }
     }
-    Text("Encrypted backup", style = MaterialTheme.typography.titleMedium)
-    Text("Transactions, corrections, payment sources, category rules and repayment history. No Android keys or permissions are copied.", style = MaterialTheme.typography.bodySmall)
-    Text(if (lastBackup > 0) "Last completed backup: ${transactionTime(lastBackup)}" else "No completed backup yet.", style = MaterialTheme.typography.bodySmall)
-    backupLocation?.let { Text("Location: $it", style = MaterialTheme.typography.bodySmall) }
-    Button(enabled = !busy, onClick = { message = null; error = null; passwordAction = "backup" }) { Text("Create encrypted backup") }
-    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-    Text("Restore backup", style = MaterialTheme.typography.titleMedium)
-    Text("Replaces this ledger; it does not merge records. You choose the file through Android. Capture and reminders are switched off after restoration.", style = MaterialTheme.typography.bodySmall)
-    OutlinedButton(enabled = !busy, onClick = { message = null; error = null; openBackup.launch(arrayOf("*/*")) }) { Text("Choose backup file") }
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Encrypted backup", style = MaterialTheme.typography.titleMedium)
+            Text("Transactions, corrections, payment sources, category rules and repayment history. No Android keys or permissions are copied.", style = MaterialTheme.typography.bodySmall)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .55f))
+            Text(if (lastBackup > 0) "Last completed backup: ${transactionTime(lastBackup)}" else "No completed backup yet.", style = MaterialTheme.typography.bodySmall)
+            backupLocation?.let { Text("Location: $it", style = MaterialTheme.typography.bodySmall) }
+            Button(enabled = !busy, onClick = { message = null; error = null; passwordAction = "backup" }, modifier = Modifier.fillMaxWidth()) { Text("Create encrypted backup") }
+        }
+    }
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Restore backup", style = MaterialTheme.typography.titleMedium)
+            Text("Preview a backup before replacing this ledger. Capture and reminders will be off after restoration.", style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(enabled = !busy, onClick = { message = null; error = null; openBackup.launch(arrayOf("*/*")) },
+                modifier = Modifier.fillMaxWidth()) { Text("Choose backup file") }
+        }
+    }
     preview?.let { ready ->
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -124,10 +133,14 @@ fun BackupPanel(repository: TransactionRepository, month: LocalDate, onBusyChang
             }
         }
     }
-    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-    Text("Export CSV", style = MaterialTheme.typography.titleMedium)
-    Text("A readable report for a chosen period. Anyone with the file can read its financial information. It cannot restore the app.", style = MaterialTheme.typography.bodySmall)
-    OutlinedButton(enabled = !busy, onClick = { message = null; error = null; csvDialog = true }) { Text("Export CSV report") }
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Export CSV", style = MaterialTheme.typography.titleMedium)
+            Text("A readable report, not a restore backup. Anyone with the file can read its financial information.", style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(enabled = !busy, onClick = { message = null; error = null; csvDialog = true },
+                modifier = Modifier.fillMaxWidth()) { Text("Export CSV report") }
+        }
+    }
     if (busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Working… keep the app open.", style = MaterialTheme.typography.bodySmall) }
     message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

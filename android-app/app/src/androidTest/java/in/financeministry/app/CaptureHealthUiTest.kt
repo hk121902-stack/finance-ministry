@@ -18,7 +18,7 @@ class CaptureHealthUiTest {
             prefs.edit().putBoolean("notifications", false).putBoolean("capture_error", true)
                 .putLong("last_capture_at", 1_790_070_000_000L).commit()
             rule.onNodeWithText("Settings").performClick()
-            rule.onNodeWithText("SMS and past messages").performScrollTo().performClick()
+            rule.onNodeWithText("SMS & notifications").performScrollTo().performClick()
             rule.onNodeWithText("Capture health").performScrollTo().performClick()
             rule.onNodeWithText("Off in app").assertExists()
             rule.onNodeWithText("Last recorded SMS").assertExists()

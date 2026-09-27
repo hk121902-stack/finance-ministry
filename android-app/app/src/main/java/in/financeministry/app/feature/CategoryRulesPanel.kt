@@ -15,7 +15,7 @@ import `in`.financeministry.app.data.*
 import kotlinx.coroutines.launch
 
 @Composable
-fun CategoryRulesPanel(repository: TransactionRepository, onConflict: (String) -> Unit) {
+fun CategoryRulesPanel(repository: TransactionRepository, onConflict: (String) -> Unit, onFromTransaction: () -> Unit) {
     val revision by repository.revision.collectAsState()
     var rules by remember { mutableStateOf<List<CategoryRuleEntity>>(emptyList()) }
     var sources by remember { mutableStateOf<List<PaymentSourceEntity>>(emptyList()) }
@@ -34,6 +34,7 @@ fun CategoryRulesPanel(repository: TransactionRepository, onConflict: (String) -
     }
     Text("Future payments only. Exact merchant matches can be limited to a payment source. Rules never change purpose, amounts or financial confirmation.", style = MaterialTheme.typography.bodySmall)
     Button(onClick = { creating = true }, enabled = !busy) { Text("New rule") }
+    TextButton(onClick = onFromTransaction, enabled = !busy) { Text("From a transaction") }
     if (loaded && rules.isEmpty()) Text("No rules yet. You can also remember a category when editing a transaction.")
     val conflictingIds = CategoryRules.conflictingRuleIds(rules)
     rules.forEach { rule ->

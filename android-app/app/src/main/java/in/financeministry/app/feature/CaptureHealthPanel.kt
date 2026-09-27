@@ -50,25 +50,29 @@ fun CaptureHealthPanel(repository: TransactionRepository, refreshGeneration: Int
     fun appSettings() = openSettings(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
 
     Text("Permission and capture status on this device.", style = MaterialTheme.typography.bodyMedium)
-    HealthFact("SMS capture", if (captureEnabled) "Enabled" else "Paused",
-        if (captureEnabled) "Incoming supported bank alerts can be recorded." else "Manual entry remains available.")
-    TextButton(onClick = onManageCapture) { Text("Manage SMS capture") }
-    HealthFact("SMS permission", if (smsAllowed) "Allowed" else "Not allowed")
-    if (!smsAllowed) TextButton(onClick = ::appSettings) { Text("Open Android permission settings") }
-    HealthFact("Recording notifications", when {
-        !notificationsEnabled -> "Off in app"
-        !recordingNotificationsAvailable -> "Blocked by Android"
-        else -> "Allowed"
-    }, "Notifications do not control SMS capture.")
-    if (!notificationsEnabled) TextButton(onClick = onManageCapture) { Text("Manage recording notifications") }
-    if (!recordingNotificationsAvailable) TextButton(onClick = {
-        openSettings(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
-    }) { Text("Open Android notification settings") }
-    HealthFact("Last recorded SMS", if (lastCapture > 0) transactionTime(lastCapture) else "None recorded yet",
-        "No recent capture does not prove a payment was missed.")
-    HealthFact("Recording errors", if (errorDetected) "A recording error was detected" else "None detected",
-        if (errorDetected) "Check your recent payments and add any missing transaction. This is an observed error, not a count of missed payments."
-        else "Only errors observed by the app can be reported.")
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            HealthFact("SMS capture", if (captureEnabled) "Enabled" else "Paused",
+                if (captureEnabled) "Incoming supported bank alerts can be recorded." else "Manual entry remains available.")
+            TextButton(onClick = onManageCapture) { Text("Manage SMS capture") }
+            HealthFact("SMS permission", if (smsAllowed) "Allowed" else "Not allowed")
+            if (!smsAllowed) TextButton(onClick = ::appSettings) { Text("Open Android permission settings") }
+            HealthFact("Recording notifications", when {
+                !notificationsEnabled -> "Off in app"
+                !recordingNotificationsAvailable -> "Blocked by Android"
+                else -> "Allowed"
+            }, "Notifications do not control SMS capture.")
+            if (!notificationsEnabled) TextButton(onClick = onManageCapture) { Text("Manage recording notifications") }
+            if (!recordingNotificationsAvailable) TextButton(onClick = {
+                openSettings(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+            }) { Text("Open Android notification settings") }
+            HealthFact("Last recorded SMS", if (lastCapture > 0) transactionTime(lastCapture) else "None recorded yet",
+                "No recent capture does not prove a payment was missed.")
+            HealthFact("Recording errors", if (errorDetected) "A recording error was detected" else "None detected",
+                if (errorDetected) "Check your recent payments and add any missing transaction. This is an observed error, not a count of missed payments."
+                else "Only errors observed by the app can be reported.")
+        }
+    }
     Text("Android may delay or withhold messages. The app cannot detect every SMS it never receives.", style = MaterialTheme.typography.bodySmall)
     HorizontalDivider(Modifier.padding(vertical = 8.dp))
     Text("Missed a payment?", style = MaterialTheme.typography.titleMedium)

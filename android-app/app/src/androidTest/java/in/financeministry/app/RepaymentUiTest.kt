@@ -16,7 +16,7 @@ class RepaymentUiTest {
         val r = (rule.activity.application as FinanceMinistryApp).container.repository
         val before = runBlocking { r.snapshot().rows.map { it.id }.toSet() }
         try {
-            rule.onNodeWithText("+ Add transaction").performClick()
+            rule.onNodeWithContentDescription("Add transaction").performClick()
             rule.onNodeWithText("Amount (INR)").performTextInput("123.45")
             rule.onNodeWithText("For someone else").performScrollTo().performClick()
             rule.onNodeWithText("No · gift or treat").performScrollTo().performClick()

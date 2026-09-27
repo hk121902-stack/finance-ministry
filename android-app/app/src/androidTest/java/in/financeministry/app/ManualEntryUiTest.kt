@@ -19,11 +19,11 @@ class ManualEntryUiTest {
             rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
             rule.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
             rule.onNodeWithText("Settings").performClick()
-            rule.onNodeWithText("SMS and past messages").performClick()
+            rule.onNodeWithText("SMS & notifications").performClick()
             rule.onNodeWithText("Enable SMS capture").assertExists()
             rule.onNodeWithText("Back").performClick()
             rule.onNodeWithText("Home").performClick()
-            rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
+            rule.onNodeWithContentDescription("Add transaction").assertIsDisplayed()
         } finally { repository.preferences.edit().putBoolean("sms_disclosure", previous).commit() }
     }
 
@@ -31,7 +31,7 @@ class ManualEntryUiTest {
         val repository = (rule.activity.application as FinanceMinistryApp).container.repository
         val before = runBlocking { repository.snapshot().rows.map { it.id }.toSet() }
         try {
-            rule.onNodeWithText("+ Add transaction").performClick()
+            rule.onNodeWithContentDescription("Add transaction").performClick()
             rule.onNodeWithText("Amount (INR)").performTextInput("512.34")
             rule.onNodeWithText("Save transaction").performSemanticsAction(SemanticsActions.OnClick)
             try {
@@ -39,7 +39,7 @@ class ManualEntryUiTest {
             } catch (failure: Throwable) {
                 throw AssertionError("Save did not finish. UI state: ${rule.onRoot().printToString()}", failure)
             }
-            rule.onNodeWithText("+ Add transaction").assertIsDisplayed()
+            rule.onNodeWithContentDescription("Add transaction").assertIsDisplayed()
             val savedRow = hasText("₹512.34") and hasClickAction()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(savedRow)
             rule.onNode(savedRow).assertIsDisplayed()
@@ -51,8 +51,8 @@ class ManualEntryUiTest {
     }
 
     @Test fun manual_form_keeps_date_source_and_notes_in_more_details() {
-        rule.onNodeWithText("+ Add transaction").performClick()
-        rule.onNodeWithText("More details · date, source and notes").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Add transaction").performClick()
+        rule.onNodeWithText("More details").assertIsDisplayed()
         rule.onAllNodes(hasText("Date:", substring = true)).assertCountEquals(0)
     }
 }

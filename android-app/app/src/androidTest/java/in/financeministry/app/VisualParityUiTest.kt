@@ -43,14 +43,34 @@ class VisualParityUiTest {
             rule.waitUntil(15_000) { rule.onAllNodesWithText("Loading transactions…").fetchSemanticsNodes().isEmpty() }
             capture("$variant-overview.png")
 
-            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Spending breakdown"))
-            rule.onNodeWithText("Spending breakdown").performClick()
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Open spending breakdown"))
+            rule.onNodeWithContentDescription("Open spending breakdown").performClick()
             rule.waitUntil(15_000) { rule.onAllNodesWithContentDescription("Open Food spending").fetchSemanticsNodes().isNotEmpty() }
             rule.onNodeWithContentDescription("Open Food spending").assertIsDisplayed()
             capture("$variant-spending-breakdown.png")
 
-            rule.onNodeWithText("Back").performClick()
+            rule.onNodeWithContentDescription("Open Food spending").performClick()
+            rule.waitUntil(15_000) { rule.onAllNodesWithText("Your share · Food").fetchSemanticsNodes().isNotEmpty() }
+            capture("$variant-transactions-category.png")
+            rule.onNodeWithText("Select").performClick()
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Select Group dinner"))
+            rule.onNodeWithContentDescription("Select Group dinner").performClick()
+            capture("$variant-transactions-selection.png")
+            rule.onNodeWithText("Done").performClick()
+            rule.onNodeWithContentDescription("Open overview").performClick()
+            rule.onNodeWithContentDescription("Add transaction").performClick()
+            rule.onNodeWithText("Save transaction").assertIsDisplayed()
+            capture("$variant-add-transaction.png")
+            rule.onNodeWithText("Cancel").performClick()
+            rule.onNodeWithContentDescription("Open review tab").performClick()
+            rule.waitUntil(15_000) { rule.onAllNodesWithText("You’re all caught up. No saved transactions need review.").fetchSemanticsNodes().isNotEmpty() }
+            capture("$variant-review-details.png")
+            rule.onNodeWithText("Possible matches").performClick()
+            rule.waitUntil(15_000) { rule.onAllNodesWithText("No possible matches found.", substring = true).fetchSemanticsNodes().isNotEmpty() }
+            capture("$variant-review-matches.png")
+            rule.onNodeWithContentDescription("Open overview").performClick()
             rule.onNodeWithText("Settings").performClick()
+            capture("$variant-settings.png")
             rule.onNodeWithText("Optional tools").performScrollTo().performClick()
             rule.waitUntil(15_000) { rule.onAllNodesWithText("₹2,500.00 left", substring = true).fetchSemanticsNodes().isNotEmpty() }
             capture("$variant-budget.png")

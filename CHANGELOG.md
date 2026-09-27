@@ -4,6 +4,23 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.1.0-alpha.14
+
+- Bring the approved next-chapter design into the native app: a calmer Overview,
+  in-place Transactions selection, a focused add/edit sheet, and clearer Review
+  and Settings navigation.
+- Open a spending category in the filtered Transactions list, with personal share
+  and gross money out labelled separately. Keep filtered result totals available
+  on demand rather than as a large permanent card.
+- Make category and purpose editing reachable from transaction details, and put
+  search inside transaction filters without changing how records are stored.
+- Improve backup, capture-health, budget and reminder presentation while keeping
+  their existing data and permission behavior.
+- Preserve an unsaved edit draft when Android recreates the activity during the
+  transaction sheet. A dirty form cannot be dismissed by an accidental swipe.
+- Known limitation: SMS capture and OEM-specific notification behavior still need
+  physical-device validation; parser output must be reviewed for misses or errors.
+
 ## 0.1.0-alpha.13
 
 - Add dated repayment history with partial cash or linked incoming repayments,
