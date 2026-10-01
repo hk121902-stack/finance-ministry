@@ -28,6 +28,7 @@ fun OptionalToolsPanel(repository: TransactionRepository, month: LocalDate, init
     var tab by rememberSaveable(initialTab) { mutableStateOf(initialTab) }
     var budgets by remember { mutableStateOf<List<BudgetStatus>>(emptyList()) }
     var reminders by remember { mutableStateOf<List<RecurringReminderEntity>>(emptyList()) }
+    var categories by remember { mutableStateOf(transactionCategories) }
     var error by remember { mutableStateOf<String?>(null) }
     var editBudget by remember { mutableStateOf(false) }
     var editReminder by remember { mutableStateOf(false) }
@@ -41,6 +42,7 @@ fun OptionalToolsPanel(repository: TransactionRepository, month: LocalDate, init
         try {
             budgets = repository.budgetStatuses(month)
             reminders = repository.recurringReminders()
+            categories = repository.categories()
         } catch (_: Exception) { error = "Could not load optional tools. Your ledger is unchanged." }
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -117,14 +119,14 @@ fun OptionalToolsPanel(repository: TransactionRepository, month: LocalDate, init
             }
         }
     }
-    if (editBudget) BudgetEditor(onDismiss = { editBudget = false }, onSave = { category, amount, alert ->
+    if (editBudget) BudgetEditor(categories, onDismiss = { editBudget = false }, onSave = { category, amount, alert ->
         busy = true; scope.launch {
             try { repository.saveBudget(category, amount, alert); editBudget = false }
             catch (failure: Exception) { error = failure.message }
             finally { busy = false }
         }
     })
-    if (editReminder) ReminderEditor(onDismiss = { editReminder = false }, onSave = { title, amount, day, category ->
+    if (editReminder) ReminderEditor(categories, onDismiss = { editReminder = false }, onSave = { title, amount, day, category ->
         busy = true; scope.launch {
             try { repository.saveRecurringReminder(title, amount, day, category); editReminder = false }
             catch (failure: Exception) { error = failure.message }
@@ -159,14 +161,14 @@ fun OptionalToolsPanel(repository: TransactionRepository, month: LocalDate, init
 }
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable private fun BudgetEditor(onDismiss: () -> Unit, onSave: (String, String, Int?) -> Unit) {
+@Composable private fun BudgetEditor(categories: List<String>, onDismiss: () -> Unit, onSave: (String, String, Int?) -> Unit) {
     var category by rememberSaveable { mutableStateOf("Other") }
     var amount by rememberSaveable { mutableStateOf("") }
     var alert by rememberSaveable { mutableStateOf<Int?>(null) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Category budget") },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Category")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { transactionCategories.forEach { option ->
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { categories.forEach { option ->
                 FilterChip(category == option, { category = option }, { Text(option) }, modifier = Modifier.testTag("budget-category-$option"))
             } }
             OutlinedTextField(amount, { amount = it }, label = { Text("Monthly amount (INR)") }, singleLine = true,
@@ -181,7 +183,7 @@ fun OptionalToolsPanel(repository: TransactionRepository, month: LocalDate, init
 }
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable private fun ReminderEditor(onDismiss: () -> Unit, onSave: (String, String, Int, String) -> Unit) {
+@Composable private fun ReminderEditor(categories: List<String>, onDismiss: () -> Unit, onSave: (String, String, Int, String) -> Unit) {
     var title by rememberSaveable { mutableStateOf("") }
     var amount by rememberSaveable { mutableStateOf("") }
     var day by rememberSaveable { mutableStateOf("1") }
@@ -195,7 +197,7 @@ fun OptionalToolsPanel(repository: TransactionRepository, month: LocalDate, init
             OutlinedTextField(day, { day = it.filter(Char::isDigit).take(2) }, label = { Text("Day of month") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("reminder-day"))
             Text("Category")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { transactionCategories.forEach { option ->
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { categories.forEach { option ->
                 FilterChip(category == option, { category = option }, { Text(option) }, modifier = Modifier.testTag("reminder-category-$option"))
             } }
             Text("This reminder never initiates a payment or records a transaction automatically.", style = MaterialTheme.typography.bodySmall)

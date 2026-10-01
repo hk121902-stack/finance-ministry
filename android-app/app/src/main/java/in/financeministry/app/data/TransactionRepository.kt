@@ -64,9 +64,11 @@ class TransactionRepository(private val context: Context, private val namespace:
         val direction = filterParts.firstOrNull { it in listOf("Debit", "Credit") } ?: "All"
         val categories = filterParts.filter { it.startsWith("Category:") }.map { it.removePrefix("Category:") }.distinct()
         val sourceIds = filterParts.filter { it.startsWith("Source:") }.map { it.removePrefix("Source:") }.distinct()
+        val knownCategories = if (database == null && !context.getDatabasePath(dbName).exists()) transactionCategories
+            else categoryOptions(db().transactions())
         require(filter == "All" || filter == "Review" || filterParts.all {
             it in listOf("Manual", "Edited", "Personal", "Family", "ForOthers", "Group", "SelfTransfer", "Debit", "Credit") ||
-                (it.startsWith("Category:") && it.removePrefix("Category:") in transactionCategories) ||
+                (it.startsWith("Category:") && it.removePrefix("Category:") in knownCategories) ||
                 (it.startsWith("Source:") && it.removePrefix("Source:").matches(Regex("[A-Za-z0-9-]{1,80}")))
         })
         if (database == null && !context.getDatabasePath(dbName).exists()) return@locked LedgerSnapshot(emptyList(), BigInteger.ZERO, BigInteger.ZERO)
@@ -319,6 +321,7 @@ class TransactionRepository(private val context: Context, private val namespace:
         input.validate()
         val dao = db().transactions()
         val old = id?.let { requireNotNull(dao.get(it)) { "This transaction no longer exists." } }
+        require(categoryExists(dao, input.category.trim()) || old?.category == input.category.trim()) { "Choose an available category." }
         require(old == null || !dao.hasActiveFinancialMatch(old.id)) { "Undo the match decision in Review before editing this transaction." }
         input.paymentSourceId?.let { sourceId ->
             val source = requireNotNull(dao.source(sourceId)) { "Choose an available payment source." }
@@ -378,6 +381,7 @@ class TransactionRepository(private val context: Context, private val namespace:
         rememberedRule: RememberCategoryRule? = null) = locked {
         val dao = db().transactions()
         val old = requireNotNull(dao.get(id)) { "This transaction no longer exists." }
+        require(categoryExists(dao, category.trim()) || old.category == category.trim()) { "Choose an available category." }
         require(!dao.hasActiveFinancialMatch(id)) { "Undo the match decision in Review before editing this transaction." }
         val amount = requireNotNull(old.amountMinor) { "Review the amount first using Edit all details." }
         val input = ManualInput(java.math.BigDecimal.valueOf(amount, 2).toPlainString(), Direction.Debit,

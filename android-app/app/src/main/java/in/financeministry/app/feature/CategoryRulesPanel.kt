@@ -19,6 +19,7 @@ fun CategoryRulesPanel(repository: TransactionRepository, onConflict: (String) -
     val revision by repository.revision.collectAsState()
     var rules by remember { mutableStateOf<List<CategoryRuleEntity>>(emptyList()) }
     var sources by remember { mutableStateOf<List<PaymentSourceEntity>>(emptyList()) }
+    var categories by remember { mutableStateOf(transactionCategories) }
     var conflicts by remember { mutableStateOf<List<TransactionEntity>>(emptyList()) }
     var creating by rememberSaveable { mutableStateOf(false) }
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
@@ -28,7 +29,7 @@ fun CategoryRulesPanel(repository: TransactionRepository, onConflict: (String) -
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(revision) {
-        try { rules = repository.categoryRules(); sources = repository.paymentSources(); conflicts = repository.categoryConflicts(); loaded = true }
+        try { rules = repository.categoryRules(); sources = repository.paymentSources(); categories = repository.categories(); conflicts = repository.categoryConflicts(); loaded = true }
         catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (_: Exception) { error = "Could not load category rules." }
     }
@@ -68,7 +69,7 @@ fun CategoryRulesPanel(repository: TransactionRepository, onConflict: (String) -
     }
     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     val existing = rules.firstOrNull { it.id == editing }
-    if (creating || existing != null) RuleEditor(repository, existing, sources) { creating = false; editing = null }
+    if (creating || existing != null) RuleEditor(repository, existing, sources, categories) { creating = false; editing = null }
     deleting?.let { id -> AlertDialog(onDismissRequest = { if (!busy) deleting = null }, title = { Text("Delete this rule?") },
         text = { Text("Previously recorded transactions will not change.") },
         confirmButton = { TextButton(enabled = !busy, onClick = { busy = true; scope.launch {
@@ -79,7 +80,7 @@ fun CategoryRulesPanel(repository: TransactionRepository, onConflict: (String) -
         } }) { Text("Delete rule") } }, dismissButton = { TextButton(onClick = { deleting = null }, enabled = !busy) { Text("Cancel") } }) }
 }
 
-@Composable private fun RuleEditor(repository: TransactionRepository, existing: CategoryRuleEntity?, sources: List<PaymentSourceEntity>, onDone: () -> Unit) {
+@Composable private fun RuleEditor(repository: TransactionRepository, existing: CategoryRuleEntity?, sources: List<PaymentSourceEntity>, categories: List<String>, onDone: () -> Unit) {
     var merchant by rememberSaveable(existing?.id) { mutableStateOf(existing?.merchant.orEmpty()) }
     var category by rememberSaveable(existing?.id) { mutableStateOf(existing?.category ?: "Other") }
     var sourceId by rememberSaveable(existing?.id) { mutableStateOf(existing?.sourceId) }
@@ -89,7 +90,7 @@ fun CategoryRulesPanel(repository: TransactionRepository, onConflict: (String) -
     AlertDialog(onDismissRequest = { if (!busy) onDone() }, title = { Text(if (existing == null) "New category rule" else "Edit category rule") },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(merchant, { merchant = it.take(60) }, label = { Text("Exact merchant") }, singleLine = true)
-            CompactChoice("Rule category", category, transactionCategories.map { it to it }) { category = it }
+            CompactChoice("Rule category", category, categories.map { it to it }) { category = it }
             CompactChoice("Rule source", sourceId ?: "", listOf("" to "All sources") + sources.filter { it.active || it.id == sourceId }.map { it.id to it.nickname }) { sourceId = it.ifBlank { null } }
             Text("Matches the whole name, ignoring letter case and surrounding spaces. Existing transactions stay unchanged.", style = MaterialTheme.typography.bodySmall)
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

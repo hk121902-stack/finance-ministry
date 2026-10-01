@@ -50,6 +50,9 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     var rememberForSource by rememberSaveable(existing?.id) { mutableStateOf(false) }
     var sourceId by rememberSaveable(existing?.id) { mutableStateOf(existing?.paymentSourceId) }
     var sources by remember { mutableStateOf<List<PaymentSourceEntity>>(emptyList()) }
+    var availableCategories by remember { mutableStateOf(transactionCategories) }
+    var addingCategory by remember { mutableStateOf(false) }
+    val revision by repository.revision.collectAsState()
     var detailsExpanded by rememberSaveable(existing?.id, quickOnly) { mutableStateOf(existing != null && !quickOnly) }
     var optional by rememberSaveable(existing?.id, quickOnly) { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -61,6 +64,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     val dirty = rememberCategory || initialFields != listOf(amount, direction, status, type, channel, date, label, notes, hint, category, ownership, groupLabel, personalShare, repaid, sourceId, repaymentExpected.toString())
     SideEffect { onDirtyChange(dirty) }
     LaunchedEffect(existing?.id) { sources = repository.paymentSources() }
+    LaunchedEffect(revision) { availableCategories = repository.categories() }
     val pickerTheme = if (androidx.compose.foundation.isSystemInDarkTheme()) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert
     var discard by remember { mutableStateOf(false) }
     val leave = { if (!busy) { if (dirty) discard = true else onDone() }; Unit }
@@ -90,7 +94,8 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         if (direction == "Unknown") Text("Choose money out, money in, or transfer.", color = MaterialTheme.colorScheme.error)
         OutlinedTextField(label, { label = it.take(60); if (label.trim().length < 2) rememberCategory = false }, label = { Text("Merchant or short label (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }
-        Choice("Category", category, transactionCategories) { category = it }
+        Choice("Category", category, availableCategories) { category = it }
+        TextButton(onClick = { addingCategory = true }) { Text("Add category") }
         if (existing?.categoryNeedsReview == true) Text("Conflicting rules matched this payment. Choose its category; the payment's financial status is unchanged.", style = MaterialTheme.typography.bodySmall)
         if (label.trim().length >= 2) {
             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -224,6 +229,9 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         text = { Text("Your changes have not been saved.") },
         confirmButton = { TextButton(onClick = { discard = false; onDone() }) { Text("Discard changes") } },
         dismissButton = { TextButton(onClick = { discard = false }) { Text("Keep editing") } })
+    if (addingCategory) AddCategoryDialog(repository,
+        onCreated = { created -> category = created; availableCategories = availableCategories + created; addingCategory = false },
+        onDismiss = { addingCategory = false })
 }
 
 @Composable private fun SourceChoice(value: String?, channel: String, sources: List<PaymentSourceEntity>, onChoose: (String?) -> Unit) {

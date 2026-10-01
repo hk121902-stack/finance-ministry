@@ -5,7 +5,6 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.math.BigDecimal
 import java.util.UUID
-import `in`.financeministry.app.core.model.transactionCategories
 
 data class BudgetProgress(val spentMinor: Long, val limitMinor: Long) {
     init { require(spentMinor >= 0); require(limitMinor > 0) }
@@ -67,7 +66,7 @@ suspend fun TransactionRepository.budgetStatuses(month: LocalDate, today: LocalD
 }
 
 suspend fun TransactionRepository.saveBudget(category: String, amount: String, alertPercent: Int?): BudgetEntity = withLedger { db ->
-    require(category in transactionCategories) { "Choose a supported category." }
+    require(categoryExists(db.transactions(), category)) { "Choose a supported category." }
     require(alertPercent == null || alertPercent in 50..100) { "Choose an alert from 50% to 100%." }
     val limit = requireNotNull(optionalToolAmount(amount))
     val dao = db.transactions()
@@ -101,7 +100,7 @@ suspend fun TransactionRepository.saveRecurringReminder(title: String, amount: S
     val cleanTitle = title.trim()
     require(cleanTitle.length in 2..40) { "Enter a short reminder name." }
     require(preferredDay in 1..31) { "Choose a day from 1 to 31." }
-    require(category in transactionCategories) { "Choose a supported category." }
+    require(categoryExists(db.transactions(), category)) { "Choose a supported category." }
     val parsedAmount = optionalToolAmount(amount, optional = true)
     val now = System.currentTimeMillis()
     val saved = RecurringReminderEntity(UUID.randomUUID().toString(), cleanTitle, parsedAmount,

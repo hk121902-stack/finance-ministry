@@ -4,6 +4,17 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.1.0-alpha.15
+
+- Add built-in Income and Investment transaction categories and a way to create
+  persistent, local custom categories while editing or adding a transaction. Custom
+  categories work in filters, rules, batch edits, budgets, reminders and encrypted backups.
+- Categories remain labels: money-in/out and spending calculations are unchanged.
+  Alpha.15 restores older backups; its new-format backups require alpha.15 or later.
+- Known limitation: SMS capture and OEM-specific notification behavior still need
+  physical-device validation; parser output must be reviewed for misses or errors.
+
+
 ## 0.1.0-alpha.14
 
 - Bring the approved next-chapter design into the native app: a calmer Overview,

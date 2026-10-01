@@ -105,6 +105,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var selectedMonth by rememberSaveable { mutableStateOf(java.time.YearMonth.now().toString()) }
     var showGuide by remember { mutableStateOf(!repository.preferences.getBoolean("onboarding_complete", false)) }
     var paymentSources by remember { mutableStateOf(emptyList<PaymentSourceEntity>()) }
+    var availableCategories by remember { mutableStateOf(transactionCategories) }
     var showSummaryDetails by rememberSaveable { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
     var showResultsTotals by remember { mutableStateOf(false) }
@@ -172,6 +173,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 runCatching { `in`.financeministry.app.sms.BudgetAlerts.evaluate(context, repository) }
             }
             paymentSources = repository.paymentSources()
+            availableCategories = repository.categories()
             reviewCount = repository.reviewCount()
             reviewAvailable = reviewCount > 0
             categoryConflictCount = repository.categoryConflicts().size
@@ -773,7 +775,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
             Text("Category", style = MaterialTheme.typography.labelLarge)
             Text("Choose one or more. None selected includes all categories.", style = MaterialTheme.typography.bodySmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                transactionCategories.forEach { category ->
+                availableCategories.forEach { category ->
                     FilterChip(selected = category in draftCategories, onClick = {
                         draftCategories = if (category in draftCategories) draftCategories - category else draftCategories + category
                     }, label = { Text(category) })
@@ -831,7 +833,7 @@ private fun sourceParts(value: String): List<String> = value.split("+").filter {
 
 private fun combinedFilter(purpose: String, origin: String, direction: String = "All", categories: List<String> = emptyList(),
     sourceIds: List<String> = emptyList()): String = (listOf(purpose, origin, direction) +
-    transactionCategories.filter { it in categories }.map { "Category:$it" } + sourceIds.distinct().map { "Source:$it" })
+    categories.distinct().map { "Category:$it" } + sourceIds.distinct().map { "Source:$it" })
     .filter { it != "All" }.joinToString("+").ifBlank { "All" }
 
 private fun filterLabel(value: String, paymentSources: List<PaymentSourceEntity>): String {

@@ -6,7 +6,7 @@ An Android expense tracker that records transactions from incoming SMS and lets 
 
 **Status: early alpha.** The release channel is for installable **debug APKs** for testing. The app is being developed by one maintainer and is not ready for general use. Parsing can miss or misclassify transactions; check your records. Do not make this your only financial record.
 
-The release candidate in this repository is **v0.1.0-alpha.14**. The latest published
+The release candidate in this repository is **v0.1.0-alpha.15**. The latest published
 debug alpha remains available from [GitHub Releases](https://github.com/hk121902-stack/finance-ministry/releases).
 Download the debug APK from its assets. The release includes its SHA-256 checksum,
 signing-certificate details, and license notices. Physical-device testing is pending.
@@ -23,6 +23,9 @@ signing-certificate details, and license notices. Physical-device testing is pen
   category or compatible payment source with a preview and Undo.
 - Set an optional on-device home greeting and filter transactions by category, purpose,
   money flow or origin. Filter-result totals never replace monthly Overview totals.
+- Add your own categories from the transaction form, or use the built-in Income and
+  Investment categories. Categories are local labels; they do not change money-in/out
+  direction or the spending calculations. Custom categories are included in encrypted backups.
 - Track partial repayments and gifts/treats without mixing gross group payments into
   personal spending or silently settling any debt.
 - Review possible duplicate records and own-account transfers as suggestions, with

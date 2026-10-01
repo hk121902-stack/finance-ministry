@@ -18,6 +18,7 @@ fun BatchCleanupActions(repository: TransactionRepository, rows: List<Transactio
     var category by rememberSaveable { mutableStateOf("Other") }
     var sourceId by rememberSaveable { mutableStateOf("") }
     var sources by remember { mutableStateOf<List<PaymentSourceEntity>>(emptyList()) }
+    var categories by remember { mutableStateOf(transactionCategories) }
     var preview by remember { mutableStateOf<BatchPreview?>(null) }
     var undo by remember { mutableStateOf<BatchUndo?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -26,7 +27,7 @@ fun BatchCleanupActions(repository: TransactionRepository, rows: List<Transactio
     val revision by repository.revision.collectAsState()
     val scope = rememberCoroutineScope()
     LaunchedEffect(revision) {
-        try { sources = repository.activePaymentSources() }
+        try { sources = repository.activePaymentSources(); categories = repository.categories() }
         catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (_: Exception) { error = "Could not load payment sources." }
     }
@@ -53,7 +54,7 @@ fun BatchCleanupActions(repository: TransactionRepository, rows: List<Transactio
         AlertDialog(onDismissRequest = { if (!busy) { mode = null; preview = null } }, title = { Text(if (kind == "category") "Change category" else "Assign payment source") },
             text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("${selected.size} selected transactions")
-                if (kind == "category") CompactChoice("Batch category", category, transactionCategories.map { it to it }) { category = it; preview = null }
+                if (kind == "category") CompactChoice("Batch category", category, categories.map { it to it }) { category = it; preview = null }
                 else {
                     CompactChoice("Batch source", sourceId, sources.map { it.id to it.nickname }) { sourceId = it; preview = null }
                     if (sources.isEmpty()) Text("Add a payment source in Settings first.")

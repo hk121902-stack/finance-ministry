@@ -2,7 +2,6 @@ package `in`.financeministry.app.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import `in`.financeministry.app.core.model.transactionCategories
 import java.util.Locale
 import java.util.UUID
 
@@ -16,7 +15,7 @@ internal fun buildRememberedRule(dao: TransactionDao, row: TransactionEntity, ch
     require(choice.merchant.trim().length in 2..60 && CategoryRules.normalize(choice.merchant) == CategoryRules.normalize(row.counterpartyLabel.orEmpty())) {
         "A remembered rule must match this transaction's merchant."
     }
-    require(row.category in transactionCategories) { "Choose a category." }
+    require(categoryExists(dao, row.category)) { "Choose a category." }
     choice.sourceId?.let { require(it == row.paymentSourceId && dao.source(it)?.active == true) { "Choose this payment's active source, or all sources." } }
     val old = dao.rules().firstOrNull { CategoryRules.normalize(it.merchant) == CategoryRules.normalize(choice.merchant) &&
         it.sourceId == choice.sourceId && it.category == row.category }
@@ -52,7 +51,7 @@ suspend fun TransactionRepository.categoryConflicts(): List<TransactionEntity> =
 suspend fun TransactionRepository.saveCategoryRule(merchant: String, sourceId: String?, category: String,
     enabled: Boolean = true, id: String? = null): CategoryRuleEntity = withLedger { db ->
     require(merchant.trim().length in 2..60) { "Enter a merchant name between 2 and 60 characters." }
-    require(category in transactionCategories) { "Choose a category." }
+    require(categoryExists(db.transactions(), category)) { "Choose a category." }
     sourceId?.let { require(db.transactions().source(it) != null) { "Choose a registered source." } }
     val old = id?.let { ruleId -> requireNotNull(db.transactions().rules().firstOrNull { it.id == ruleId }) { "Rule no longer exists." } }
     val rule = CategoryRuleEntity(old?.id ?: UUID.randomUUID().toString(), merchant.trim(), sourceId, category, enabled, old?.createdAt ?: System.currentTimeMillis())

@@ -47,6 +47,7 @@ private fun TransactionRepository.backupData(db: FinanceDatabase): JSONObject {
     val settings = JSONObject()
     backupPreferences.sorted().forEach { name -> preferences.all[name]?.let { settings.put(name, it) } }
     return JSONObject().put("tables", tables).put("preferences", settings)
+        .put("customCategories", JSONArray(customCategories(db.transactions())))
 }
 
 private fun digest(value: ByteArray): String = Base64.encodeToString(MessageDigest.getInstance("SHA-256").digest(value), Base64.NO_WRAP)
@@ -56,7 +57,7 @@ suspend fun TransactionRepository.createEncryptedBackup(password: CharArray): By
 
 suspend fun TransactionRepository.prepareBackup(password: CharArray): PreparedBackup = withLedger { db ->
     val data = backupData(db)
-    val plain = JSONObject().put("format", 1).put("schema", 7).put("createdAt", System.currentTimeMillis())
+    val plain = JSONObject().put("format", 2).put("schema", 7).put("createdAt", System.currentTimeMillis())
         .put("origin", installationId()).put("fingerprintHistoryRequiresReview", db.transactions().metadata("foreign_restore") == "true")
         .put("data", data).toString().toByteArray(Charsets.UTF_8)
     try {
@@ -109,9 +110,10 @@ suspend fun TransactionRepository.previewBackup(encrypted: ByteArray, password: 
 
 suspend fun TransactionRepository.hasBackupData(): Boolean = withLedger { db -> hasBackupData(db) }
 
-private fun hasBackupData(db: FinanceDatabase): Boolean = backupTables.any { table ->
-    db.openHelper.readableDatabase.query("SELECT 1 FROM `$table` LIMIT 1").use { it.moveToFirst() }
-}
+private fun hasBackupData(db: FinanceDatabase): Boolean = customCategories(db.transactions()).isNotEmpty() ||
+    backupTables.any { table ->
+        db.openHelper.readableDatabase.query("SELECT 1 FROM `$table` LIMIT 1").use { it.moveToFirst() }
+    }
 
 suspend fun TransactionRepository.restoreBackup(preview: BackupPreview, protectCurrent: Boolean): RestoreResult = withLedger { db ->
     require(preview.eraseGeneration == eraseGeneration.value) { "This preview expired. Choose the backup again." }
@@ -148,6 +150,10 @@ suspend fun TransactionRepository.restoreBackup(preview: BackupPreview, protectC
                 db.openHelper.writableDatabase.execSQL("INSERT INTO `$table` ($names) VALUES ($marks)", bindings)
             }
         }
+        db.transactions().removeMetadata(CUSTOM_CATEGORIES_KEY)
+        val categories = decodeCustomCategories(data.getJSONArray("customCategories"))
+        if (categories.isNotEmpty()) db.transactions().metadata(
+            LedgerMetadataEntity(CUSTOM_CATEGORIES_KEY, JSONArray(categories).toString()))
         db.openHelper.writableDatabase.execSQL("UPDATE recurring_reminders SET active = 0")
         db.openHelper.writableDatabase.query("PRAGMA foreign_key_check").use { require(!it.moveToFirst()) { "Backup links are invalid." } }
         db.transactions().metadata(LedgerMetadataEntity("pending_restore_settings", data.getJSONObject("preferences").toString()))
@@ -195,10 +201,14 @@ private fun validateBackup(root: JSONObject, db: FinanceDatabase) {
         require(!oldTables.has("budgets") && !oldTables.has("recurring_reminders")) { "Unexpected legacy backup table." }
         oldTables.put("budgets", JSONArray()).put("recurring_reminders", JSONArray()); root.put("schema", 7)
     }
-    require(root.optInt("format") == 1 && root.optInt("schema") == 7 && root.optLong("createdAt") > 0 && root.optString("origin").length in 1..80) {
+    if (root.optInt("format") == 1 && root.optInt("schema") == 7) {
+        root.getJSONObject("data").put("customCategories", JSONArray()); root.put("format", 2)
+    }
+    require(root.optInt("format") == 2 && root.optInt("schema") == 7 && root.optLong("createdAt") > 0 && root.optString("origin").length in 1..80) {
         "Unsupported backup version. Your ledger was not changed."
     }
     val data = root.getJSONObject("data")
+    val allowedCategories = (transactionCategories + decodeCustomCategories(data.getJSONArray("customCategories"))).toSet()
     val tables = data.getJSONObject("tables")
     require(tables.keys().asSequence().toSet() == backupTables.toSet()) { "Backup tables are incomplete." }
     val rowsByTable = mutableMapOf<String, Map<String, JSONObject>>()
@@ -244,7 +254,7 @@ private fun validateBackup(root: JSONObject, db: FinanceDatabase) {
     val transactions = rowsByTable.getValue("transactions")
     val sources = rowsByTable.getValue("payment_sources")
     for (budget in rowsByTable.getValue("budgets").values) {
-        require(budget.getString("category") in transactionCategories && budget.getLong("monthlyLimitMinor") > 0 &&
+        require(budget.getString("category") in allowedCategories && budget.getLong("monthlyLimitMinor") > 0 &&
             (budget.isNull("alertPercent") || budget.getLong("alertPercent") in 50L..100L) &&
             budget.getLong("createdAt") > 0 && budget.getLong("updatedAt") >= budget.getLong("createdAt")) { "Invalid budget." }
     }
@@ -252,7 +262,7 @@ private fun validateBackup(root: JSONObject, db: FinanceDatabase) {
     for (reminder in rowsByTable.getValue("recurring_reminders").values) {
         require(reminder.getString("title").trim().length in 2..40 &&
             (reminder.isNull("amountMinor") || reminder.getLong("amountMinor") > 0) &&
-            reminder.getLong("preferredDay") in 1L..31L && reminder.getString("category") in transactionCategories &&
+            reminder.getLong("preferredDay") in 1L..31L && reminder.getString("category") in allowedCategories &&
             reminder.getLong("createdAt") > 0 && reminder.getLong("updatedAt") >= reminder.getLong("createdAt")) { "Invalid recurring reminder." }
         require(reminder.isNull("lastLinkedAt") == reminder.isNull("lastLinkedTransactionId")) { "Incomplete recurring payment link." }
         if (!reminder.isNull("lastLinkedTransactionId")) {
@@ -266,7 +276,11 @@ private fun validateBackup(root: JSONObject, db: FinanceDatabase) {
         require(decision.getString("action") in MatchAction.entries.map { it.name } && decision.getLong("createdAt") > 0) { "Invalid match decision." }
         require(decision.isNull("undoneAt") || decision.getLong("undoneAt") > 0) { "Invalid match undo date." }
         require(decision.getString("pairKey") == TransactionMatching.pairKey(decision.getString("firstId"), decision.getString("secondId"))) { "Invalid match pair." }
-        listOf("beforeFirst", "beforeSecond", "afterFirst", "afterSecond").forEach { key -> validateMatchState(decision.getString(key)) }
+        listOf("beforeFirst", "beforeSecond", "afterFirst", "afterSecond").forEach { key ->
+            val state = decision.getString(key)
+            validateMatchState(state)
+            require(JSONObject(state).getString("category") in allowedCategories) { "Match category is missing." }
+        }
     }
     for (source in sources.values) {
         require(source.getString("channel") in Channel.entries.map { it.name } && source.getString("nickname").trim().length in 2..40) { "Invalid payment source." }
@@ -277,6 +291,7 @@ private fun validateBackup(root: JSONObject, db: FinanceDatabase) {
             row.getString("channel") in Channel.entries.map { it.name } && row.getString("transactionType") in TransactionType.entries.map { it.name } &&
             row.getString("ownership") in SpendingOwnership.entries.map { it.name } && row.getString("reviewState") in ReviewState.entries.map { it.name }) { "Invalid transaction state." }
         require(row.getString("sourceType") in SourceType.entries.map { it.name }) { "Invalid transaction origin." }
+        require(row.getString("category") in allowedCategories) { "Transaction category is missing." }
         val amount = if (row.isNull("amountMinor")) null else row.getLong("amountMinor")
         require(amount == null || amount > 0) { "Invalid transaction amount." }
         require(row.getLong("effectiveTimestamp") > 0 && row.getLong("sourceTimestamp") > 0) { "Invalid transaction date." }
@@ -311,7 +326,7 @@ private fun validateBackup(root: JSONObject, db: FinanceDatabase) {
     }
     transactions.forEach { (id, row) -> require(BigInteger.valueOf(row.getLong("repaidMinor")) == (expenseTotals[id] ?: BigInteger.ZERO)) { "Repayment history does not match its total." } }
     for (r in rowsByTable.getValue("category_rules").values) {
-        require(r.getString("category") in transactionCategories && r.getString("merchant").trim().length in 2..60) { "Invalid category rule." }
+        require(r.getString("category") in allowedCategories && r.getString("merchant").trim().length in 2..60) { "Invalid category rule." }
         require(r.isNull("sourceId") || r.getString("sourceId") in sources) { "Rule source is missing." }
     }
     val prefs = data.getJSONObject("preferences")

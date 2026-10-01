@@ -41,7 +41,7 @@ internal fun validateMatchState(snapshot: String) {
     require(state.getString("direction") in setOf("Debit", "Credit") && state.getString("status") == "Successful" &&
         state.getString("review") in setOf("Confirmed", "AutoRecorded") && state.getString("channel") in Channel.entries.map { it.name } &&
         state.getString("type") in TransactionType.entries.map { it.name } && state.getString("ownership") in SpendingOwnership.entries.map { it.name } &&
-        state.getString("category") in transactionCategories) { "Invalid matched transaction state." }
+        validCategoryName(state.getString("category"))) { "Invalid matched transaction state." }
     require(state.get("expected") is Boolean && state.get("categoryReview") is Boolean && state.getLong("repaid") in 0..state.getLong("amount") &&
         (state.isNull("share") || state.get("share") is Number && state.getLong("share") in 0..state.getLong("amount"))) { "Invalid match split." }
     for (field in listOf("source", "notes", "group", "duplicate", "label", "account")) {

@@ -18,10 +18,16 @@ class CategoryAndBatchUiTest {
             r.save(ManualInput("25", Direction.Debit, System.currentTimeMillis(), TransactionType.Other, label = label)) } }
         try {
             rule.onNodeWithContentDescription("Open transactions").performClick()
+            rule.onNodeWithText("Filters").performClick()
+            rule.onNodeWithText("Search transactions").performTextInput("Batch ")
+            rule.onNodeWithText("Apply").performClick()
+            rule.waitUntil(15000) { rule.onAllNodesWithText("Batch first").fetchSemanticsNodes().isNotEmpty() }
             rule.onNodeWithText("Select").performClick()
             rule.onNodeWithText("Select transactions").assertDoesNotExist()
+            rule.waitUntil(15000) { rule.onAllNodesWithContentDescription("Select Batch first").fetchSemanticsNodes().isNotEmpty() }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Select Batch first"))
             rule.onNodeWithContentDescription("Select Batch first").performClick()
+            rule.waitUntil(15000) { rule.onAllNodesWithContentDescription("Select Batch second").fetchSemanticsNodes().isNotEmpty() }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Select Batch second"))
             rule.onNodeWithContentDescription("Select Batch second").performClick()
             rule.onNodeWithText("Category").performClick()
@@ -51,6 +57,7 @@ class CategoryAndBatchUiTest {
             rule.onNodeWithText("Food").performClick()
             rule.onNodeWithText("Save rule").performClick()
             rule.waitUntil(15000) { runBlocking { r.categoryRules().any { it.merchant == "Rule test merchant" } } }
+            rule.waitUntil(15000) { rule.onAllNodesWithContentDescription("Enable rule Rule test merchant").fetchSemanticsNodes().isNotEmpty() }
             rule.onNodeWithContentDescription("Enable rule Rule test merchant").performScrollTo().performClick()
             rule.waitUntil(15000) { runBlocking { r.categoryRules().single { it.merchant == "Rule test merchant" }.enabled.not() } }
             rule.onNodeWithContentDescription("Delete rule Rule test merchant").performScrollTo().performClick()

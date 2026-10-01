@@ -1,6 +1,5 @@
 package `in`.financeministry.app.data
 
-import `in`.financeministry.app.core.model.transactionCategories
 import java.util.UUID
 
 internal data class BatchChange(val id: String, val before: String?, val after: String?, val auditCount: Int, val categoryNeedsReview: Boolean)
@@ -17,7 +16,7 @@ class BatchPreview internal constructor(internal val owner: TransactionRepositor
 suspend fun TransactionRepository.previewBatch(ids: Set<String>, category: String? = null, sourceId: String? = null): BatchPreview = withLedger { db ->
     require(ids.size in 1..500) { "Select between 1 and 500 transactions." }
     require((category == null) != (sourceId == null)) { "Choose a category or a payment source." }
-    category?.let { require(it in transactionCategories) { "Choose a category." } }
+    category?.let { require(categoryExists(db.transactions(), it)) { "Choose a category." } }
     val dao = db.transactions()
     val source = sourceId?.let { requireNotNull(dao.source(it)) { "Source no longer exists." } }
     require(source == null || source.active) { "Choose an active source." }
@@ -51,7 +50,7 @@ suspend fun TransactionRepository.batchUpdate(ids: Set<String>, category: String
 private fun TransactionRepository.performBatch(db: FinanceDatabase, ids: Set<String>, category: String?, sourceId: String?): BatchUndo {
     require(ids.size in 1..500) { "Select between 1 and 500 transactions." }
     require((category == null) != (sourceId == null)) { "Choose a category or a payment source." }
-    category?.let { require(it in transactionCategories) { "Choose a category." } }
+    category?.let { require(categoryExists(db.transactions(), it)) { "Choose a category." } }
     val dao = db.transactions()
     val source = sourceId?.let { requireNotNull(dao.source(it)) { "Source no longer exists." } }
     require(source == null || source.active) { "Choose an active source." }

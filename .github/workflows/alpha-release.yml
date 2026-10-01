@@ -94,9 +94,9 @@ jobs:
           set -euo pipefail
           printf '%s\n' "Debug alpha $VERSION for testing; not ready for general use." '' \
             'Download the APK asset. See README for setup and permission instructions.' '' \
-            'Highlights: the approved native Overview and Transactions refresh, in-place selected-row cleanup, a focused add/edit sheet, category drill-down with personal share versus gross money out, and clearer Review and Settings navigation.' '' \
-            'Repayment tracking, conservative duplicate/transfer review, category rules, capture health, budgets, reminders and the opt-in quick-add widget remain available.' '' \
-            'Password-encrypted backup/restore and CSV export are available. Keep the backup password safe; the app cannot recover it.' '' \
+            'Highlights: add your own local transaction categories from the add/edit sheet, plus built-in Income and Investment labels. Custom categories work in filters, rules, batch edits, budgets, reminders and encrypted backups.' '' \
+            'Categories do not change money-in/out or spending calculations. This version can restore older backups; backups created with custom categories require alpha.15 or later.' '' \
+            'Repayment tracking, conservative duplicate/transfer review, capture health and the opt-in quick-add widget remain available. Keep any backup password safe; the app cannot recover it.' '' \
             'Install over a previous official alpha to update. Back up an important ledger before updating or replacing data.' '' \
             'JVM tests, lint and assembly passed in this signed release run. Android 16 emulator validation passed; physical-device verification is still pending.' '' \
             "Source commit: $GITHUB_SHA" > "$RUNNER_TEMP/release-notes.md"
