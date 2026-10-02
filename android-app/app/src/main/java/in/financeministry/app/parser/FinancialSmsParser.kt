@@ -110,8 +110,8 @@ class RuleBasedFinancialSmsParser {
 
     private fun detectDirection(text: String): Direction {
         if (ParserRules.ownAccounts.containsMatchIn(text)) return Direction.Transfer
-        val debit = ParserRules.debit.containsMatchIn(text) || ParserRules.sentPayment.containsMatchIn(text) || ParserRules.cardSpend.containsMatchIn(text) || CardAlertFormats.hasMovement(text) || MovementTemplates.debit(text)
-        val credit = ParserRules.credit.containsMatchIn(text) || MovementTemplates.credit(text)
+        val debit = ParserRules.debit.containsMatchIn(text) || ParserRules.sentPayment.containsMatchIn(text) || ParserRules.cardSpend.containsMatchIn(text) || CardAlertFormats.hasMovement(text) || MovementTemplates.debit(text) || CardBillPaymentFormats.debit(text)
+        val credit = ParserRules.credit.containsMatchIn(text) || MovementTemplates.credit(text) || CardBillPaymentFormats.credit(text)
         if (debit && credit) return if (ParserRules.isIciciAccountDebit(text)) Direction.Debit else Direction.Unknown
         if (debit) return Direction.Debit
         if (credit) return Direction.Credit
@@ -130,6 +130,12 @@ class RuleBasedFinancialSmsParser {
     private fun detectChannel(text: String): Channel = when {
         ParserRules.cardSpend.containsMatchIn(text) || CardAlertFormats.hasMovement(text) || MovementTemplates.card(text) -> Channel.Card
         Regex("\\bupi\\b").containsMatchIn(text) -> Channel.UPI
+        CardBillPaymentFormats.debit(text) -> when {
+            Regex("\\bimps\\b").containsMatchIn(text) -> Channel.IMPS
+            Regex("\\bneft\\b").containsMatchIn(text) -> Channel.NEFT
+            Regex("\\brtgs\\b").containsMatchIn(text) -> Channel.RTGS
+            else -> Channel.BankTransfer
+        }
         Regex("\\batm\\b").containsMatchIn(text) -> Channel.ATM
         Regex("\\bcard\\b").containsMatchIn(text) -> Channel.Card
         Regex("\\bimps\\b").containsMatchIn(text) -> Channel.IMPS
@@ -140,9 +146,9 @@ class RuleBasedFinancialSmsParser {
     }
 
     private fun detectTransactionType(text: String, channel: Channel): TransactionType = when {
-        MovementTemplates.repayment.containsMatchIn(text) -> TransactionType.CardRepayment
         Regex("\\brefund(?:ed)?\\b").containsMatchIn(text) -> TransactionType.Refund
         ParserRules.reversed.containsMatchIn(text) -> TransactionType.Reversal
+        CardBillPaymentFormats.matches(text) -> TransactionType.CardRepayment
         Regex("\\bsalary\\b").containsMatchIn(text) -> TransactionType.SalaryIncome
         Regex("\\b(?:fee|charge)\\b").containsMatchIn(text) -> TransactionType.FeeCharge
         Regex("\\b(?:cash withdrawn|withdrawn)\\b").containsMatchIn(text) -> TransactionType.CashWithdrawal
@@ -214,6 +220,6 @@ class RuleBasedFinancialSmsParser {
         counterpartyLabel = null,
         confidence = confidence,
         ruleId = ruleId,
-        parserVersion = 6,
+        parserVersion = 7,
     )
 }

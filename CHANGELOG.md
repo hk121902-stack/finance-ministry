@@ -4,6 +4,20 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.1.0-alpha.16
+
+- Recognize merchant-first OneCard/Federal purchase alerts, including "Fresh picks!"
+  messages without a transaction date, preserving merchant and masked card details.
+
+- Label card-bill settlements clearly in transactions, details, import previews and
+  notifications instead of presenting issuer confirmations as money received.
+- Recognize more explicit card-bill receipts and bank-side bill-payment confirmations;
+  refunds, cashback and generic debits are not automatically reclassified.
+- Add a confirmed "Mark as card bill payment" action and an accessible add/edit option.
+  The shortcut preserves amount, status and review state and records a correction.
+- Add "Card bill payments" and "Card credits to check" filters. Existing records are
+  not silently rewritten; raw SMS is not retained for retrospective parsing.
+
 ## 0.1.0-alpha.15
 
 - Add built-in Income and Investment transaction categories and a way to create

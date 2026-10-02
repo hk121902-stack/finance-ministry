@@ -28,6 +28,6 @@ internal object MovementTemplates {
     fun secondaryConfirmation(text: String) = receipt(text) || autopay.containsMatchIn(text)
     fun debit(text: String) = listOf(bobDebit, axisCard, hdfcCardUpi, pluxeeSpend, pluxeeFee, iciciCard, mandate, autopay).any { it.containsMatchIn(text) } || receipt(text)
     fun credit(text: String) = listOf(received, deposited, postedRefund, initiatedRefund, repayment).any { it.containsMatchIn(text) }
-    fun matches(text: String) = debit(text) || credit(text)
+    fun matches(text: String) = debit(text) || credit(text) || CardBillPaymentFormats.matches(text)
     fun card(text: String) = listOf(axisCard, hdfcCardUpi, iciciCard, autopay).any { it.containsMatchIn(text) }
 }

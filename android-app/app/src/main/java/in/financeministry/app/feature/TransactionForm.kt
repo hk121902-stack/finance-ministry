@@ -32,6 +32,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     var direction by rememberSaveable(existing?.id) { mutableStateOf(existing?.direction ?: "Debit") }
     var status by rememberSaveable(existing?.id) { mutableStateOf(existing?.status ?: "Successful") }
     var type by rememberSaveable(existing?.id) { mutableStateOf(existing?.transactionType ?: "Other") }
+    var previousType by rememberSaveable(existing?.id) { mutableStateOf(existing?.transactionType?.takeUnless { it == "CardRepayment" } ?: "Other") }
     var channel by rememberSaveable(existing?.id) { mutableStateOf(existing?.channel ?: "CashManual") }
     val initialDate = rememberSaveable(existing?.id) {
         LocalDateTime.ofInstant(Instant.ofEpochMilli(existing?.effectiveTimestamp ?: System.currentTimeMillis()), ZoneId.systemDefault()).format(formatter)
@@ -79,7 +80,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
             if (!compact && !detailsExpanded) TextButton(onClick = { detailsExpanded = true }) { Text("More details") }
         }
         if (compact && existing != null) {
-            Text("${`in`.financeministry.app.money(existing.amountMinor)} · ${existing.counterpartyLabel ?: friendly(existing.direction)}", style = MaterialTheme.typography.titleMedium)
+            Text("${`in`.financeministry.app.money(existing.amountMinor)} · ${existing.counterpartyLabel ?: transactionFlowLabel(existing)}", style = MaterialTheme.typography.titleMedium)
             if (existing.reviewState == "NeedsReview") Text("Still needs review. Saving labels will not confirm the payment.", style = MaterialTheme.typography.bodySmall)
         }
         if (!compact) {
@@ -88,10 +89,16 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         if (existing != null && amount.isBlank()) Text("Enter the transaction amount; it could not be identified.", color = MaterialTheme.colorScheme.error)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("Debit", "Credit", "Transfer").forEach { option ->
-                FilterChip(selected = direction == option, onClick = { direction = option }, label = { Text(friendly(option)) })
+                FilterChip(selected = direction == option, onClick = { direction = option }, label = { Text(if (type == "CardRepayment" && option != "Transfer") if (option == "Debit") "Bank payment" else "Card confirmation" else friendly(option)) })
             }
         }
         if (direction == "Unknown") Text("Choose money out, money in, or transfer.", color = MaterialTheme.colorScheme.error)
+        if (direction in listOf("Debit", "Credit") && ownership !in listOf("SelfTransfer", "ForOther", "Group") && type !in listOf("Refund", "Reversal", "SelfTransfer")) {
+            FilterChip(selected = type == "CardRepayment", onClick = {
+                if (type == "CardRepayment") type = previousType else { previousType = type; type = "CardRepayment" }
+            }, label = { Text("Card bill payment") })
+        }
+        if (type == "CardRepayment") Text("Pays your own card bill, not a new purchase or income. Excluded from spending and money-in/out totals.", style = MaterialTheme.typography.bodySmall)
         OutlinedTextField(label, { label = it.take(60); if (label.trim().length < 2) rememberCategory = false }, label = { Text("Merchant or short label (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }
         Choice("Category", category, availableCategories) { category = it }
@@ -112,7 +119,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         }
         Text("Who was this payment for?", style = MaterialTheme.typography.labelLarge)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Personal", "Family", "ForOther", "Group", "SelfTransfer").forEach { option ->
+            (if (type == "CardRepayment") listOf("Personal", "Family") else listOf("Personal", "Family", "ForOther", "Group", "SelfTransfer")).forEach { option ->
                 FilterChip(selected = ownership == option, onClick = {
                     ownership = option
                     type = if (option == "SelfTransfer") "SelfTransfer" else if (type == "SelfTransfer") "Other" else type

@@ -7,6 +7,14 @@ import org.junit.Test
 
 class ManualInputTest {
     private fun input(amount: String) = ManualInput(amount, Direction.Debit, 1700000000000, TransactionType.Other)
+    @Test fun card_bills_cannot_have_a_group_split_or_transfer_direction() {
+        val bill = input("1000").copy(type = TransactionType.CardRepayment)
+        bill.validate()
+        bill.copy(direction = Direction.Credit).validate()
+        assertThrows(IllegalArgumentException::class.java) { bill.copy(direction = Direction.Transfer).validate() }
+        assertThrows(IllegalArgumentException::class.java) { bill.copy(ownership = SpendingOwnership.ForOther).validate() }
+        assertThrows(IllegalArgumentException::class.java) { bill.copy(ownership = SpendingOwnership.Group, groupLabel = "Group").validate() }
+    }
     @Test fun gifts_count_fully_without_creating_a_repayment_balance() {
         val gift = input("3000").copy(ownership = SpendingOwnership.Group, groupLabel = "Birthday",
             personalShare = "1000", repaymentExpected = false)

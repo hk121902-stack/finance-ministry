@@ -6,7 +6,7 @@ An Android expense tracker that records transactions from incoming SMS and lets 
 
 **Status: early alpha.** The release channel is for installable **debug APKs** for testing. The app is being developed by one maintainer and is not ready for general use. Parsing can miss or misclassify transactions; check your records. Do not make this your only financial record.
 
-The release candidate in this repository is **v0.1.0-alpha.15**. The latest published
+The release candidate in this repository is **v0.1.0-alpha.16**. The latest published
 debug alpha remains available from [GitHub Releases](https://github.com/hk121902-stack/finance-ministry/releases).
 Download the debug APK from its assets. The release includes its SHA-256 checksum,
 signing-certificate details, and license notices. Physical-device testing is pending.
@@ -26,6 +26,13 @@ signing-certificate details, and license notices. Physical-device testing is pen
 - Add your own categories from the transaction form, or use the built-in Income and
   Investment categories. Categories are local labels; they do not change money-in/out
   direction or the spending calculations. Custom categories are included in encrypted backups.
+- Card bill payments settle an existing card balance, so they are excluded from
+  spending and money-in/out totals. Both the bank debit and issuer confirmation can
+  be retained. Use the transaction's "Mark as card bill payment" action to correct
+  an older record, or select it while adding/editing. The "Card credits to check"
+  filter surfaces unclassified card credits for the selected month, including
+  possible cashback: review each one, rather than marking all as bill payments.
+  Generic bank debits without explicit bill-payment wording still need correction.
 - Track partial repayments and gifts/treats without mixing gross group payments into
   personal spending or silently settling any debt.
 - Review possible duplicate records and own-account transfers as suggestions, with

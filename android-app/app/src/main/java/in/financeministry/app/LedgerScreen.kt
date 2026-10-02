@@ -74,6 +74,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var disclosure by remember { mutableStateOf(false) }
     var eraseDialog by remember { mutableStateOf(false) }
     var deleteDialog by remember { mutableStateOf(false) }
+    var cardBillDialog by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var handledReviewRequest by remember { mutableIntStateOf(0) }
     var handledAddRequest by remember { mutableIntStateOf(0) }
@@ -115,6 +116,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var draftPurposeFilter by remember { mutableStateOf("All") }
     var draftOriginFilter by remember { mutableStateOf("All") }
     var draftDirectionFilter by remember { mutableStateOf("All") }
+    var draftPaymentKindFilter by remember { mutableStateOf("All") }
     var draftCategories by remember { mutableStateOf(emptyList<String>()) }
     var draftSourceIds by remember { mutableStateOf(emptyList<String>()) }
     var draftSearch by remember { mutableStateOf("") }
@@ -303,7 +305,8 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
             else if (selected != null) {
                 val row = selected!!
                 Text(money(row.amountMinor), style = MaterialTheme.typography.headlineSmall)
-                Text("${friendly(row.direction)} · ${friendly(row.status)}")
+                Text("${`in`.financeministry.app.feature.transactionFlowLabel(row)} · ${friendly(row.status)}")
+                if (row.transactionType == "CardRepayment") Text("Pays an existing card balance. Excluded from spending and money-in/out totals; purchases count when they happen.", style = MaterialTheme.typography.bodySmall)
                 Text("${friendly(row.transactionType)} · ${friendly(row.channel)} · ${friendly(row.sourceType)}")
                 paymentSources.firstOrNull { it.id == row.paymentSourceId }?.let { Text("Payment source: ${it.nickname}${if (it.active) "" else " (inactive)"}", style = MaterialTheme.typography.bodySmall) }
                 if (row.paymentSourceId == null && paymentSources.any { it.active && it.channel == row.channel })
@@ -340,6 +343,8 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 `in`.financeministry.app.feature.RepaymentHistoryPanel(repository, row,
                     RepaymentAccounting.eligible(row, snapshot?.reversedOriginalIds.orEmpty()))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (selectedMatch == null && row.direction in listOf("Debit", "Credit") && row.ownership !in listOf("SelfTransfer", "ForOther", "Group") && row.transactionType !in listOf("CardRepayment", "Refund", "Reversal", "SelfTransfer"))
+                        OutlinedButton(onClick = { cardBillDialog = true }) { Text("Mark as card bill payment") }
                     OutlinedButton(onClick = { quickForm = true; form = true }, enabled = selectedMatch == null) { Text("Category & purpose") }
                     Button(onClick = { form = true }, enabled = selectedMatch == null) { Text("Edit / confirm") }
                     OutlinedButton(onClick = { selected = null; selectedId = null }) { Text("Back") }
@@ -524,13 +529,13 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text(java.time.YearMonth.parse(selectedMonth).format(DateTimeFormatter.ofPattern("MMMM uuuu")), style = MaterialTheme.typography.titleMedium)
                         TextButton(onClick = {
-                            draftPurposeFilter = purposePart(filter); draftOriginFilter = originPart(filter); draftDirectionFilter = directionPart(filter); draftCategories = categoryParts(filter); draftSourceIds = sourceParts(filter); draftSearch = search; showFilters = true
+                            draftPurposeFilter = purposePart(filter); draftOriginFilter = originPart(filter); draftDirectionFilter = directionPart(filter); draftPaymentKindFilter = paymentKindPart(filter); draftCategories = categoryParts(filter); draftSourceIds = sourceParts(filter); draftSearch = search; showFilters = true
                         }, modifier = Modifier.semantics { contentDescription = "Filter transactions" }) { Text("Filters") }
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (filter != "All") {
                             FilterChip(selected = true, onClick = {
-                                draftPurposeFilter = purposePart(filter); draftOriginFilter = originPart(filter); draftDirectionFilter = directionPart(filter); draftCategories = categoryParts(filter); draftSourceIds = sourceParts(filter); draftSearch = search; showFilters = true
+                                draftPurposeFilter = purposePart(filter); draftOriginFilter = originPart(filter); draftDirectionFilter = directionPart(filter); draftPaymentKindFilter = paymentKindPart(filter); draftCategories = categoryParts(filter); draftSourceIds = sourceParts(filter); draftSearch = search; showFilters = true
                             }, label = { Text(filterLabel(filter, paymentSources)) })
                         }
                         if (search.isNotBlank()) FilterChip(selected = true, onClick = { search = ""; offset = 0; snapshot = null }, label = { Text("Search: $search") })
@@ -608,7 +613,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                                 }
                                 val namedSource = paymentSources.firstOrNull { it.id == row.paymentSourceId }
                                 Text(buildList {
-                                    add(friendly(row.direction))
+                                    add(`in`.financeministry.app.feature.transactionFlowLabel(row))
                                     transactionLabels(row)?.let(::add)
                                     namedSource?.nickname?.let(::add)
                                 }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
@@ -727,6 +732,16 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 style = MaterialTheme.typography.bodySmall)
         } },
         confirmButton = { TextButton(onClick = { showResultsTotals = false }) { Text("Close") } })
+    if (cardBillDialog && selected != null) AlertDialog(onDismissRequest = { if (!busy) cardBillDialog = false },
+        title = { Text("Mark as card bill payment?") },
+        text = { Text("Only use this for paying your own credit card bill, not a purchase, refund or cashback. This record will be excluded from spending and money-in/out totals. Its amount, status and review state stay unchanged. You can change the type back in Edit / confirm.") },
+        confirmButton = { TextButton(enabled = !busy, onClick = { busy = true; scope.launch {
+            try { selected = repository.markCardBillPayment(selected!!.id); cardBillDialog = false; error = null }
+            catch (e: IllegalArgumentException) { error = e.message; cardBillDialog = false }
+            catch (_: Exception) { error = "Could not update this payment. Please retry."; cardBillDialog = false }
+            finally { busy = false }
+        } }) { Text("Mark bill payment") } },
+        dismissButton = { TextButton(enabled = !busy, onClick = { cardBillDialog = false }) { Text("Cancel") } })
     if (showFilters) AlertDialog(onDismissRequest = { showFilters = false }, title = { Text("Filter transactions") }, text = {
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(draftSearch, { draftSearch = it.take(80) }, label = { Text("Search transactions") },
@@ -740,6 +755,16 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     }, label = { Text(if (option == "Debit") "Money out" else "Money in") })
                 }
             }
+            HorizontalDivider()
+            Text("Payment type", style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("CardBills", "CardCreditsToCheck").forEach { option ->
+                    FilterChip(selected = draftPaymentKindFilter == option, onClick = {
+                        draftPaymentKindFilter = if (draftPaymentKindFilter == option) "All" else option
+                    }, label = { Text(friendlyFilter(option)) })
+                }
+            }
+            if (draftPaymentKindFilter == "CardCreditsToCheck") Text("Unclassified card credits in this month. Check each record: some may be cashback or other genuine credits. Nothing is changed automatically.", style = MaterialTheme.typography.bodySmall)
             HorizontalDivider()
             Text("Purpose", style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -785,12 +810,12 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     }, confirmButton = { TextButton(onClick = {
         val knownSourceIds = paymentSources.map { it.id }.toSet()
         val next = combinedFilter(draftPurposeFilter, draftOriginFilter, draftDirectionFilter, draftCategories,
-            draftSourceIds.filter { it in knownSourceIds })
+            draftSourceIds.filter { it in knownSourceIds }, draftPaymentKindFilter)
         if (next != filter || draftSearch != search || offset != 0) { filter = next; search = draftSearch; offset = 0; snapshot = null }
         showFilters = false
     }) { Text("Apply") } },
         dismissButton = { TextButton(onClick = {
-            draftPurposeFilter = "All"; draftOriginFilter = "All"; draftDirectionFilter = "All"; draftCategories = emptyList(); draftSourceIds = emptyList(); draftSearch = ""
+            draftPurposeFilter = "All"; draftOriginFilter = "All"; draftDirectionFilter = "All"; draftPaymentKindFilter = "All"; draftCategories = emptyList(); draftSourceIds = emptyList(); draftSearch = ""
             if (filter != "All" || search.isNotBlank() || offset != 0) { filter = "All"; search = ""; offset = 0; snapshot = null }
             showFilters = false
         }, modifier = Modifier.semantics { contentDescription = "Clear transaction filters" }) { Text("Clear all") } })
@@ -827,12 +852,14 @@ private fun directionPart(value: String): String = value.split("+").firstOrNull 
     it in listOf("Debit", "Credit")
 } ?: "All"
 
+private fun paymentKindPart(value: String): String = value.split("+").firstOrNull { it in listOf("CardBills", "CardCreditsToCheck") } ?: "All"
+
 private fun categoryParts(value: String): List<String> = value.split("+").filter { it.startsWith("Category:") }.map { it.removePrefix("Category:") }
 
 private fun sourceParts(value: String): List<String> = value.split("+").filter { it.startsWith("Source:") }.map { it.removePrefix("Source:") }
 
 private fun combinedFilter(purpose: String, origin: String, direction: String = "All", categories: List<String> = emptyList(),
-    sourceIds: List<String> = emptyList()): String = (listOf(purpose, origin, direction) +
+    sourceIds: List<String> = emptyList(), paymentKind: String = "All"): String = (listOf(purpose, origin, direction, paymentKind) +
     categories.distinct().map { "Category:$it" } + sourceIds.distinct().map { "Source:$it" })
     .filter { it != "All" }.joinToString("+").ifBlank { "All" }
 
@@ -848,6 +875,8 @@ private fun filterLabel(value: String, paymentSources: List<PaymentSourceEntity>
 }
 
 private fun friendlyFilter(value: String): String = when (value) {
+    "CardBills" -> "Card bill payments"
+    "CardCreditsToCheck" -> "Card credits to check"
     "Review" -> "Needs review"
     "Debit" -> "Money out"
     "Credit" -> "Money in"

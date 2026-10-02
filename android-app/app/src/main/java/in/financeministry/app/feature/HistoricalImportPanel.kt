@@ -78,7 +78,7 @@ private fun ImportPanelContent(repository: TransactionRepository, source: Histor
                 Text("${ready.scanned} scanned · ${ready.ignored} ignored")
                 Text("${ready.ready} ready · ${ready.needsReview} need review · ${ready.duplicates} duplicates skipped")
                 Text("Unconfirmed records stay out of totals. Existing corrections are preserved. No per-transaction notifications will be sent.")
-                ready.rows.take(5).forEach { row -> Text("${date(row.effectiveTimestamp)} · ${money(row.amountMinor)} · ${friendly(row.direction)}") }
+                ready.rows.take(5).forEach { row -> Text("${date(row.effectiveTimestamp)} · ${money(row.amountMinor)} · ${transactionFlowLabel(row)}") }
                 if (ready.rows.size > 5) Text("Showing the first 5 of ${ready.rows.size} transactions.")
                 Button(onClick = {
                     if (!busy) {

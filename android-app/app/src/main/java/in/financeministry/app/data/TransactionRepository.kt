@@ -62,12 +62,13 @@ class TransactionRepository(private val context: Context, private val namespace:
         val purpose = filterParts.firstOrNull { it in listOf("Personal", "Family", "ForOthers", "Group", "SelfTransfer") } ?: "All"
         val origin = filterParts.firstOrNull { it in listOf("Manual", "Edited") } ?: "All"
         val direction = filterParts.firstOrNull { it in listOf("Debit", "Credit") } ?: "All"
+        val paymentKind = filterParts.firstOrNull { it in listOf("CardBills", "CardCreditsToCheck") } ?: "All"
         val categories = filterParts.filter { it.startsWith("Category:") }.map { it.removePrefix("Category:") }.distinct()
         val sourceIds = filterParts.filter { it.startsWith("Source:") }.map { it.removePrefix("Source:") }.distinct()
         val knownCategories = if (database == null && !context.getDatabasePath(dbName).exists()) transactionCategories
             else categoryOptions(db().transactions())
         require(filter == "All" || filter == "Review" || filterParts.all {
-            it in listOf("Manual", "Edited", "Personal", "Family", "ForOthers", "Group", "SelfTransfer", "Debit", "Credit") ||
+            it in listOf("Manual", "Edited", "Personal", "Family", "ForOthers", "Group", "SelfTransfer", "Debit", "Credit", "CardBills", "CardCreditsToCheck") ||
                 (it.startsWith("Category:") && it.removePrefix("Category:") in knownCategories) ||
                 (it.startsWith("Source:") && it.removePrefix("Source:").matches(Regex("[A-Za-z0-9-]{1,80}")))
         })
@@ -87,9 +88,9 @@ class TransactionRepository(private val context: Context, private val namespace:
         val monthEnd = month.plusMonths(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val normalizedSearch = search.trim().take(80)
         val page = db().transactions().page(purpose, origin, direction, filter == "Review", monthStart, monthEnd, 101, offset,
-            categories.isEmpty(), categories, sourceIds.isEmpty(), sourceIds, normalizedSearch)
+            categories.isEmpty(), categories, sourceIds.isEmpty(), sourceIds, normalizedSearch, paymentKind)
         val resultTotals = db().transactions().filteredTotals(purpose, origin, direction, filter == "Review", monthStart, monthEnd,
-            categories.isEmpty(), categories, sourceIds.isEmpty(), sourceIds, normalizedSearch)
+            categories.isEmpty(), categories, sourceIds.isEmpty(), sourceIds, normalizedSearch, paymentKind)
         fun personal(row: TransactionEntity): Long = RepaymentAccounting.personal(row)
         fun owed(row: TransactionEntity): Long = RepaymentAccounting.owed(row)
         val eligibleDebits = rows.filter { eligible(it) && it.direction == Direction.Debit.name }
