@@ -58,7 +58,16 @@ class SmsBroadcastE2eTest {
             assertEquals("SMS", found!!.sourceType)
             assertEquals(expectedDirection, found.direction)
             assertEquals("AutoRecorded", found.reviewState)
-            assertTrue(app.getSystemService(NotificationManager::class.java).activeNotifications.any { it.tag == found.id })
+            // Android publishes notifications asynchronously, after the ledger row
+            // can already be observed. Include that publication in capture timing.
+            val notifications = app.getSystemService(NotificationManager::class.java)
+            val notificationDeadline = android.os.SystemClock.elapsedRealtime() + 5000
+            var published = notifications.activeNotifications.any { it.tag == found.id }
+            while (!published && android.os.SystemClock.elapsedRealtime() < notificationDeadline) {
+                Thread.sleep(25)
+                published = notifications.activeNotifications.any { it.tag == found.id }
+            }
+            assertTrue("Recording notification was not published", published)
             val observerDeadline = android.os.SystemClock.elapsedRealtime() + 2000
             while (observedAt.get() == 0L && android.os.SystemClock.elapsedRealtime() < observerDeadline) Thread.sleep(25)
             assertTrue("Broadcast observer did not receive SMS", observedAt.get() > 0)
