@@ -112,7 +112,9 @@ class LedgerUxTest {
     @Test fun overview_uses_the_monthly_summary_hierarchy() {
         rule.waitUntil(15000) { rule.onAllNodesWithText("Money out · month").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithText("Whole month").assertIsDisplayed()
+        rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Still owed to you"))
         rule.onNodeWithText("Still owed to you").assertIsDisplayed()
+        rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Outstanding from selected month"))
         rule.onNodeWithContentDescription("Outstanding from selected month").assertIsDisplayed()
     }
 
