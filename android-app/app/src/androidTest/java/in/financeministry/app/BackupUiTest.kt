@@ -49,8 +49,22 @@ class BackupUiTest {
         }))
         clickPickerText("Save")
     }
-    private fun waitForMessage(text: String) = rule.waitUntil(15000) {
-        rule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+    private fun waitForMessage(text: String) {
+        // Real password derivation runs on a worker; do not impose a UI-render
+        // timeout on its 600,000 iterations on a shared software-rendered runner.
+        val started = android.os.SystemClock.elapsedRealtime()
+        try {
+            rule.waitUntil(60000) {
+                rule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+            }
+            android.util.Log.i("BackupUiTest", "Completed '$text' in ${android.os.SystemClock.elapsedRealtime() - started} ms")
+        } catch (failure: Throwable) {
+            val states = listOf("Working… keep the app open.", "Restore preview",
+                "Unable to validate this backup. Check the password and file. Your ledger was not changed.",
+                "Could not read or prepare the backup. Your ledger was not replaced.")
+                .filter { rule.onAllNodesWithText(it).fetchSemanticsNodes().isNotEmpty() }
+            throw AssertionError("Backup operation did not reach '$text'; visible states: $states", failure)
+        }
     }
 
     @Test fun real_file_provider_backup_restore_and_csv_preserve_expected_records() {
