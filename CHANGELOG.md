@@ -4,6 +4,27 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.1.0-alpha.17
+
+- Reject more explicitly negated SMS movements and keep conversational, conditional
+  and dispute-reference candidates in Review rather than confirmed spending. Valid
+  purchase alerts with security/dispute instructions remain supported. Parser v8
+  does not rewrite existing records or authenticate bank senders.
+- Offer direct Android SMS-permission settings recovery after permanent denial;
+  refresh capture status after granting or revoking permission. Manual entry remains available.
+- Improve large-text headers, wrapping navigation and Add-button padding. Keep
+  Settings navigation visible while scrolling long content and returning between sections.
+- Add offline-readable privacy guidance, independent/non-government positioning and
+  clear explanations for exported files, backup passwords and SMS delivery dates.
+- Expand CSV schema 2 with status, source/type, own share, linked IDs, exclusion reasons
+  and dashboard contribution amounts so exported reports can be reconciled. CSV is not a backup.
+- Add regression coverage and an Android 16 CI gate with host-driven synthetic SMS
+  recording/notification validation before draft alpha releases.
+- Known limitations: this remains a debuggable testing alpha. Physical Redmi/OEM,
+  16 KB runtime, official signed upgrade/recovery and Google Play readiness are
+  separate gates. Local minified-build and fresh-install recovery checks used a
+  disposable test signer, not the official distribution certificate.
+
 ## 0.1.0-alpha.16
 
 - Recognize merchant-first OneCard/Federal purchase alerts, including "Fresh picks!"

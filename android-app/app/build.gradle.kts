@@ -13,6 +13,10 @@ val appVersion = Properties().apply {
 val alphaKeystore = providers.environmentVariable("FM_ALPHA_KEYSTORE").orNull
 val requireAlphaSigning = providers.environmentVariable("FM_REQUIRE_ALPHA_SIGNING").orNull == "true"
 check(!requireAlphaSigning || !alphaKeystore.isNullOrBlank()) { "Official alpha builds require the persistent signing keystore." }
+// Production upload credentials are deliberately separate from debug-alpha signing.
+val releaseKeystore = providers.environmentVariable("FM_RELEASE_KEYSTORE").orNull
+val requireReleaseSigning = providers.environmentVariable("FM_REQUIRE_RELEASE_SIGNING").orNull == "true"
+check(!requireReleaseSigning || !releaseKeystore.isNullOrBlank()) { "Production builds require an explicitly configured upload keystore." }
 
 // Room 2.8's migration-test serializers require a matching serialization runtime.
 // Compose/lifecycle otherwise pins core 1.7.3 while Room brings json 1.8.1.
@@ -49,6 +53,14 @@ android {
     }
 
     signingConfigs {
+        if (!releaseKeystore.isNullOrBlank()) {
+            create("productionUpload") {
+                storeFile = file(releaseKeystore)
+                storePassword = providers.environmentVariable("FM_RELEASE_STORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("FM_RELEASE_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("FM_RELEASE_KEY_PASSWORD").get()
+            }
+        }
         if (!alphaKeystore.isNullOrBlank()) {
             create("alphaDistribution") {
                 storeFile = file(alphaKeystore)
@@ -64,6 +76,7 @@ android {
             if (!alphaKeystore.isNullOrBlank()) signingConfig = signingConfigs.getByName("alphaDistribution")
         }
         release {
+            if (!releaseKeystore.isNullOrBlank()) signingConfig = signingConfigs.getByName("productionUpload")
             isMinifyEnabled = true
             isShrinkResources = true
             isDebuggable = false

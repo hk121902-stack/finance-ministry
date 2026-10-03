@@ -1,5 +1,12 @@
 # Privacy and data handling
 
+Updated 3 October 2026. Finance Ministry is an independent open-source app
+maintained by hk121902-stack, not a government service or a bank. Support is
+available through [GitHub issues](https://github.com/hk121902-stack/finance-ministry/issues);
+share synthetic examples only. Use the private reporting route in SECURITY.md
+for vulnerabilities. The app includes offline-readable privacy information under
+Settings → Data and privacy.
+
 Finance Ministry processes incoming SMS on the Android device to create a local
 transaction ledger. There is no sign-up or app backend.
 
@@ -62,6 +69,11 @@ not a complete restore backup, and is unencrypted once written to the location t
 user chooses. Restore replaces the local ledger atomically and pauses SMS capture and
 reminders for explicit reconfirmation. Database key or restore errors preserve the
 existing ledger rather than silently replacing it.
+
+The chosen file provider may sync exported files under its own policies. Erasing
+or uninstalling the app does not delete files you exported. CSV schema 2 includes
+status, transaction type, exclusion reasons and dashboard contribution fields;
+it remains an unencrypted report, not a restore backup.
 
 ## Debug alpha
 

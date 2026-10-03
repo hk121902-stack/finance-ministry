@@ -10,7 +10,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verification:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
   release:
+    needs: verification
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -92,15 +96,15 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
+          changes=$(awk -v heading="## $VERSION" '$0 == heading { collecting=1; next } collecting && /^## / { exit } collecting { print }' CHANGELOG.md)
+          test -n "$changes"
           printf '%s\n' "Debug alpha $VERSION for testing; not ready for general use." '' \
             'Download the APK asset. See README for setup and permission instructions.' '' \
-            'Highlights: card-bill settlements now have clear labels in transactions and notifications, broader explicit SMS recognition, a confirmed correction shortcut, and Card bill payments / Card credits to check filters. Classified settlements stay excluded from spending and money-in/out totals.' '' \
-            'Recognizes merchant-first OneCard/Federal purchase alerts such as Fresh picks! messages, preserving merchant and masked card details. Regression tests distinguish completed purchases from offers and future spending.' '' \
-            'Older ledger records are not silently reclassified. Review card credits individually; cashback, refunds and generic bank debits must not all be marked as bill payments. The correction shortcut preserves amount, status and review state.' '' \
-            'Custom categories, Income and Investment labels remain available. Backups created with custom categories require alpha.15 or later.' '' \
-            'Repayment tracking, conservative duplicate/transfer review, capture health and the opt-in quick-add widget remain available. Keep any backup password safe; the app cannot recover it.' '' \
+            "$changes" '' \
+            'Existing records are not silently reclassified. Review old errors individually. Backups with custom categories require alpha.15 or later; CSV schema 2 is an unencrypted report, not a restore backup.' '' \
+            'Keep any backup password safe; the app cannot recover it. This is an independent app, not a government service or bank.' '' \
             'Install over a previous official alpha to update. Back up an important ledger before updating or replacing data.' '' \
-            'JVM tests, lint and assembly passed in this signed release run. Android 16 emulator validation passed; physical-device verification is still pending.' '' \
+            'JVM tests, lint and assembly passed in this signed release run. The prerequisite Android 16 debug instrumentation and synthetic SMS gates passed. Signed artifact upgrade/recovery and physical-device verification remain separate requirements; consult version-specific reports before wider distribution.' '' \
             "Source commit: $GITHUB_SHA" > "$RUNNER_TEMP/release-notes.md"
           gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "Finance Ministry $VERSION (debug alpha)" \
             --draft --prerelease --notes-file "$RUNNER_TEMP/release-notes.md"

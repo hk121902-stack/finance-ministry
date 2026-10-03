@@ -18,7 +18,10 @@ class RepaymentUiTest {
         try {
             rule.onNodeWithContentDescription("Add transaction").performClick()
             rule.onNodeWithText("Amount (INR)").performTextInput("123.45")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            rule.onNodeWithText("Money out").performClick()
             rule.onNodeWithText("For someone else").performScrollTo().performClick()
+            rule.waitUntil(15000) { rule.onAllNodesWithText("No · gift or treat").fetchSemanticsNodes().isNotEmpty() }
             rule.onNodeWithText("No · gift or treat").performScrollTo().performClick()
             rule.onNodeWithText("Save transaction").performClick()
             rule.waitUntil(15000) { runBlocking { r.snapshot().rows.any { it.id !in before } } }

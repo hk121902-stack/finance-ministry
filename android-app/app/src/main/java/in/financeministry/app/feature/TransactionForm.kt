@@ -73,10 +73,9 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     Column(Modifier.fillMaxWidth().height(maxSheetHeight).navigationBarsPadding().imePadding().padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
       Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(if (compact) "Categorize transaction" else if (existing == null) "Add transaction" else "Edit / confirm transaction",
-                style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                style = MaterialTheme.typography.titleLarge, modifier = if (LocalConfiguration.current.fontScale >= 1.5f) Modifier.fillMaxWidth() else Modifier.weight(1f))
             if (!compact && !detailsExpanded) TextButton(onClick = { detailsExpanded = true }) { Text("More details") }
         }
         if (compact && existing != null) {

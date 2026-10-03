@@ -10,6 +10,7 @@ import kotlinx.coroutines.*
 import org.junit.Assert.*
 import org.junit.Test
 import java.security.KeyStore
+import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -39,7 +40,8 @@ class LedgerConcurrencyTest {
             } }
             start.complete(Unit)
             assertEquals(1, attempts.awaitAll().count { it })
-            val id = repository.snapshot().rows.single().id
+            val fixtureMonth = LocalDate.of(2026, 9, 1)
+            val id = repository.snapshot(today = fixtureMonth).rows.single().id
             coroutineScope {
                 val gate = CompletableDeferred<Unit>()
                 val duplicates = List(24) { async(Dispatchers.Default) {
@@ -51,7 +53,7 @@ class LedgerConcurrencyTest {
                 edit.await()
             }
             repository.close()
-            assertEquals(1, repository.snapshot().rows.size)
+            assertEquals(1, repository.snapshot(today = fixtureMonth).rows.size)
             assertEquals(4300L, repository.get(id)!!.amountMinor)
             assertTrue(repository.get(id)!!.isUserCorrected)
             assertEquals(1, notifications.get())

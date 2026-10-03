@@ -5,6 +5,7 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -46,5 +47,67 @@ jobs:
         with:
           name: android-check-reports
           path: android-app/app/build/reports/
+          retention-days: 14
+          if-no-files-found: ignore
+  emulator:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - name: Android 16 instrumentation gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'emulator' 'system-images;android-36;google_apis;x86_64'
+          # Compile before booting: do not contend with Android's initial startup.
+          cd android-app
+          ./gradlew --no-daemon --console=plain assembleDebug assembleDebugAndroidTest
+          cd ..
+          test -c /dev/kvm
+          sudo chown "$(id -u):$(id -g)" /dev/kvm
+          printf 'no\n' | avdmanager create avd -n finance-ci -d pixel_5 -k 'system-images;android-36;google_apis;x86_64'
+          "$ANDROID_HOME/emulator/emulator" -avd finance-ci -no-window -no-audio -no-boot-anim -no-snapshot -gpu software -memory 2048 -cores 2 -port 5554 > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
+          export ANDROID_SERIAL=emulator-5554
+          booted=false
+          for attempt in $(seq 1 150); do
+            if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == '1' ]]; then booted=true; break; fi
+            kill -0 "$emulator_pid"
+            sleep 2
+          done
+          test "$booted" = true
+          adb shell input keyevent 82
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          cd android-app
+          ./gradlew --no-daemon --console=plain connectedDebugAndroidTest
+          # UTP can uninstall the test APK during connected-test cleanup.
+          adb install -r app/build/outputs/apk/debug/app-debug.apk
+          adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          cd ..
+          pwsh -NoProfile -File tools/verify-sms-e2e.ps1 -AdbPath "$(command -v adb)" -Serial "$ANDROID_SERIAL" -Repetitions 3
+      - name: Instrumentation reports (host-driven tests remain separate)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-emulator-reports
+          path: |
+            android-app/app/build/reports/androidTests/
+            android-app/app/build/outputs/androidTest-results/
           retention-days: 14
           if-no-files-found: ignore

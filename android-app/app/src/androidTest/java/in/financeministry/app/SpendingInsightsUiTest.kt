@@ -17,6 +17,10 @@ class SpendingInsightsUiTest {
             TransactionType.Other, label = "Insight test dinner", category = "Food",
             ownership = SpendingOwnership.Group, groupLabel = "Dinner", personalShare = "1000")) }
         try {
+            rule.waitUntil(15000) {
+                rule.onAllNodesWithText("₹1,000.00").fetchSemanticsNodes().isNotEmpty() &&
+                    rule.onAllNodesWithText("Loading transactions…").fetchSemanticsNodes().isEmpty()
+            }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Open spending breakdown"))
             rule.onNodeWithContentDescription("Open spending breakdown").performClick()
             rule.waitUntil(15000) { rule.onAllNodesWithContentDescription("Open Food spending").fetchSemanticsNodes().isNotEmpty() }
@@ -36,6 +40,10 @@ class SpendingInsightsUiTest {
         val id = runBlocking { repository.save(ManualInput("30", Direction.Credit, System.currentTimeMillis(),
             TransactionType.Refund, label = "Insight refund")) }
         try {
+            rule.waitUntil(15000) {
+                rule.onAllNodesWithText("₹30.00").fetchSemanticsNodes().isNotEmpty() &&
+                    rule.onAllNodesWithText("Loading transactions…").fetchSemanticsNodes().isEmpty()
+            }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Open spending breakdown"))
             rule.onNodeWithContentDescription("Open spending breakdown").performClick()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Refunds received", substring = true))

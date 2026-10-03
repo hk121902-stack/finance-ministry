@@ -2,11 +2,12 @@
 import re
 import subprocess
 import sys
-from pathlib import PurePosixPath
+import argparse
+from pathlib import Path, PurePosixPath
 
 ROOT_FILES = {".gitignore", ".gitattributes", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md"}
 PUBLIC_DOCS = {"PRIVACY.md", "RELEASING.md", "ROADMAP.md", "THIRD_PARTY_NOTICES.md"}
-TOOLS = {"verify_public_tree.py", "publish-alpha.ps1"}
+TOOLS = {"verify_public_tree.py", "publish-alpha.ps1", "verify-sms-e2e.ps1"}
 PATTERNS = [
     ("private key", re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----")),
     ("GitHub token", re.compile(rb"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})\b")),
@@ -41,17 +42,23 @@ def allowed(name):
 
 
 def main():
-    names = [p.decode("utf-8") for p in git("ls-files", "-z").split(b"\0") if p]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--worktree", action="store_true", help="Check current source including non-ignored new files instead of the staged snapshot.")
+    args = parser.parse_args()
+    listing = git("ls-files", "-z", "--cached", "--others", "--exclude-standard") if args.worktree else git("ls-files", "-z")
+    names = sorted({p.decode("utf-8") for p in listing.split(b"\0") if p})
     failures = []
     for name in names:
         if not allowed(name):
             failures.append(f"{name}: not in public source allowlist")
             continue
         mode = git("ls-files", "--stage", "--", name).split(b" ", 1)[0]
-        if mode == b"120000":
+        if mode == b"120000" or (args.worktree and Path(name).is_symlink()):
             failures.append(f"{name}: symlinks are not published")
             continue
-        data = git("show", ":" + name)
+        if args.worktree and not Path(name).exists():
+            continue  # A deleted working-tree file is not being published.
+        data = Path(name).read_bytes() if args.worktree else git("show", ":" + name)
         if len(data) > 2_000_000:
             failures.append(f"{name}: unexpectedly large source file")
         if name.endswith(".jar"):
@@ -62,7 +69,7 @@ def main():
     if failures:
         print("Public-tree audit FAILED:\n" + "\n".join(failures))
         return 1
-    print(f"Public-tree audit passed for {len(names)} staged/tracked files. Review synthetic fixtures manually too.")
+    print(f"Public-tree audit passed for {len(names)} {'working-tree' if args.worktree else 'staged/tracked'} files. Review synthetic fixtures manually too.")
     return 0
 
 

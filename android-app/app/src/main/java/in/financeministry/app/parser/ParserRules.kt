@@ -4,7 +4,9 @@ import java.util.Locale
 
 internal object ParserRules {
     val otpOrVerification = Regex("\\b(?:otp|one[ -]?time(?:[ -]?password|[ -]?code)?|verification[ -]?(?:code|number)|2fa)\\b")
-    val negatedMovement = Regex("\\b(?:no transaction happened|not debited|not credited|was not debited|was not credited|did not debit|did not credit)\\b")
+    val negatedMovement = Regex("""\b(?:no transaction happened|did not (?:debit|credit|charge)|(?:not|never)\s+(?:(?:yet|been|be|being|actually)\s+){0,3}(?:debited|credited|withdrawn|transferred|spent|charged))\b""")
+    // A question, hypothetical or dispute acknowledgement is not a new payment.
+    val uncertainMovementContext = Regex("""^\s*(?:if|unless|when)\b|\b(?:i|we)\s+(?:was|were|have been|had been|got)\s+(?:debited|credited|charged)\b|\b(?:dispute|complaint|query)\s+(?:for|regarding|about)\b""")
     val amount = Regex("(?:\\bINR|\\bRs\\.?|₹)\\s*([+-]?(?:\\d{1,3}(?:,\\d{1,3})+|\\d+)(?:\\.\\d+)?)", RegexOption.IGNORE_CASE)
     val debit = Regex("\\b(?:debited|withdrawn)\\b|\\bdebit\\s+transaction\\b")
     val credit = Regex("\\bcredited\\b|\\bcredit\\s+transaction\\b")

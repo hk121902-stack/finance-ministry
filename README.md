@@ -6,7 +6,7 @@ An Android expense tracker that records transactions from incoming SMS and lets 
 
 **Status: early alpha.** The release channel is for installable **debug APKs** for testing. The app is being developed by one maintainer and is not ready for general use. Parsing can miss or misclassify transactions; check your records. Do not make this your only financial record.
 
-The release candidate in this repository is **v0.1.0-alpha.16**. The latest published
+The release candidate in this repository is **v0.1.0-alpha.17**. The latest published
 debug alpha remains available from [GitHub Releases](https://github.com/hk121902-stack/finance-ministry/releases).
 Download the debug APK from its assets. The release includes its SHA-256 checksum,
 signing-certificate details, and license notices. Physical-device testing is pending.
@@ -88,10 +88,12 @@ adb -s emulator-5554 emu sms send 5551234 "INR 314.15 debited from your account 
 ```
 With capture enabled, this produces a **Money out · Saved automatically** transaction. With notifications allowed, it also produces a notification. A message such as `Your account debited by 250` goes to **Review** because the currency amount is uncertain.
 
-Parser version 6 recognizes the supported ICICI account-debit/recipient-credit
+Parser version 8 recognizes the supported ICICI account-debit/recipient-credit
 template and additional bank/card formats, including selected Kotak and BOBCARD layouts.
 Coverage is not guaranteed. Updating does
 not change existing records; use the optional import for missed SMS still in your inbox.
+Explicit negations are rejected; ambiguous conversational or conditional movement
+references are held for review instead of silently becoming confirmed spending.
 See the [remaining parser work](docs/ROADMAP.md#confirmed-open-parser-issues).
 
 ### Updating

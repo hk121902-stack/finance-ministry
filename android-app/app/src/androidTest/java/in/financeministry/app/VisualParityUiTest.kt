@@ -97,8 +97,14 @@ class VisualParityUiTest {
         rule.waitForIdle()
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
         android.os.SystemClock.sleep(300)
-        val screenshot = requireNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val activeRoot = requireNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow) {
+            "Cannot validate the active window; refusing to capture unverifiable evidence."
+        }
+        check(activeRoot.packageName?.toString() == context.packageName) {
+            "A system dialog or another app covers the ledger; refusing to capture invalid visual evidence."
+        }
+        val screenshot = requireNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, "image/png")

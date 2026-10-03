@@ -20,7 +20,7 @@ fun FirstUseGuide(captureEnabled: Boolean, hasSources: Boolean, reminderEnabled:
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Getting started", style = MaterialTheme.typography.titleMedium)
-            Text("Add a payment now, or set up optional recording below. Everything stays on this device.", style = MaterialTheme.typography.bodyMedium)
+            Text("Add a payment now, or set up optional recording below. Your ledger stays on this device; exported files go where you choose.", style = MaterialTheme.typography.bodyMedium)
             Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) { Text("+ Add transaction") }
             TextButton(onClick = { optionalSetupExpanded.value = !optionalSetupExpanded.value }, contentPadding = PaddingValues(0.dp)) {
                 Text(if (optionalSetupExpanded.value) "Hide optional setup" else "Optional setup · SMS, sources and reminder")

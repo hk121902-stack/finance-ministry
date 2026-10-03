@@ -92,9 +92,10 @@ class RuleBasedFinancialSmsParser {
         }
 
         val secondary = MovementTemplates.secondaryConfirmation(text)
+        val uncertainContext = ParserRules.uncertainMovementContext.containsMatchIn(text)
         val unfamiliarCard = CardAlertFormats.hasMovement(text) && CardAlertFormats.match(text) == null &&
             !ParserRules.cardSpend.containsMatchIn(text) && !MovementTemplates.card(text)
-        val confidence = if (direction != Direction.Unknown && status != TransactionStatus.Unknown && !secondary && !unfamiliarCard) 96 else 70
+        val confidence = if (direction != Direction.Unknown && status != TransactionStatus.Unknown && !secondary && !unfamiliarCard && !uncertainContext) 96 else 70
         val decision = if (confidence >= 90) ParseDecision.Record else ParseDecision.NeedsReview
         return assessment(
             decision = decision,
@@ -104,7 +105,7 @@ class RuleBasedFinancialSmsParser {
             channel = channel,
             transactionType = transactionType,
             confidence = confidence,
-            ruleId = if (secondary) "secondary_payment_confirmation" else if (unfamiliarCard) "unfamiliar_card_layout" else "currency_amount_transaction",
+            ruleId = if (uncertainContext) "uncertain_transaction_context" else if (secondary) "secondary_payment_confirmation" else if (unfamiliarCard) "unfamiliar_card_layout" else "currency_amount_transaction",
         )
     }
 
@@ -220,6 +221,6 @@ class RuleBasedFinancialSmsParser {
         counterpartyLabel = null,
         confidence = confidence,
         ruleId = ruleId,
-        parserVersion = 7,
+        parserVersion = 8,
     )
 }

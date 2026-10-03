@@ -342,17 +342,38 @@ private fun validateBackup(root: JSONObject, db: FinanceDatabase) {
 suspend fun TransactionRepository.csvReport(start: Long, end: Long): String = withLedger { db ->
     require(start < end) { "Choose a valid period." }
     val sources = db.transactions().allSources().associateBy { it.id }
+    val reversed = db.transactions().reversedOriginals().toSet()
+    fun exclusion(r: TransactionEntity): String = when {
+        r.id in reversed -> "Linked reversal"
+        r.duplicateOfId != null -> "Duplicate"
+        r.currency != "INR" -> "Unsupported currency"
+        r.amountMinor == null || r.amountMinor <= 0 -> "Missing or invalid amount"
+        r.status != "Successful" -> "Status: ${r.status}"
+        r.reviewState == "NeedsReview" -> "Needs review"
+        r.transactionType == "CardRepayment" -> "Card bill settlement"
+        r.transactionType == "SelfTransfer" || r.ownership == "SelfTransfer" -> "Self transfer"
+        r.direction !in listOf("Debit", "Credit") -> "Unknown or transfer direction"
+        else -> ""
+    }
+    fun decimal(minor: Long) = java.math.BigDecimal.valueOf(minor, 2).setScale(2).toPlainString()
     fun cell(value: String): String {
         val safe = if (value.trimStart().firstOrNull() in listOf('=', '+', '-', '@')) "'$value" else value
         return "\"${safe.replace("\"", "\"\"")}\""
     }
     buildString {
-        append("Date,Label,Amount INR,Direction,Category,Purpose,Source,Repayment expected,Repaid INR,Review state\r\n")
+        append("Date,Label,Amount INR,Direction,Category,Purpose,Source,Repayment expected,Repaid INR,Review state,Currency,Status,Transaction type,Source type,Personal share INR,Linked original ID,Duplicate of ID,Excluded from totals reason,Money out contribution INR,Money in contribution INR,Your spending contribution INR,Record ID,CSV schema version\r\n")
         db.transactions().between(start, end).sortedBy { it.effectiveTimestamp }.forEach { r ->
+            val eligible = RepaymentAccounting.eligible(r, reversed)
+            val debit = eligible && r.direction == "Debit"
+            val credit = eligible && r.direction == "Credit"
             val values = listOf(java.time.Instant.ofEpochMilli(r.effectiveTimestamp).toString(),
                 r.counterpartyLabel ?: r.groupLabel.orEmpty(), r.amountMinor?.let { java.math.BigDecimal.valueOf(it, 2).toPlainString() }.orEmpty(),
                 r.direction, r.category, r.ownership, sources[r.paymentSourceId]?.nickname.orEmpty(), r.repaymentExpected.toString(),
-                java.math.BigDecimal.valueOf(r.repaidMinor, 2).toPlainString(), r.reviewState)
+                java.math.BigDecimal.valueOf(r.repaidMinor, 2).toPlainString(), r.reviewState,
+                r.currency.orEmpty(), r.status, r.transactionType, r.sourceType,
+                r.personalShareMinor?.let(::decimal).orEmpty(), r.linkedOriginalId.orEmpty(), r.duplicateOfId.orEmpty(), exclusion(r),
+                decimal(if (debit) r.amountMinor!! else 0), decimal(if (credit) r.amountMinor!! else 0),
+                decimal(if (debit) RepaymentAccounting.personal(r) else 0), r.id, "2")
             append(values.joinToString(",", transform = ::cell)); append("\r\n")
         }
     }

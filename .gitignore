@@ -20,6 +20,7 @@
 /tools/*
 !/tools/verify_public_tree.py
 !/tools/publish-alpha.ps1
+!/tools/verify-sms-e2e.ps1
 
 # Never commit generated output, local configuration, credentials, or runtime data.
 **/build/

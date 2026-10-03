@@ -18,6 +18,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import `in`.financeministry.app.data.*
@@ -84,6 +85,23 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var optionalToolsInitialTab by rememberSaveable { mutableStateOf("Budgets") }
     var notifications by remember { mutableStateOf(repository.preferences.getBoolean("notifications", true)) }
     var captureEnabled by remember { mutableStateOf(repository.captureAllowed()) }
+    fun permissionNeedsSettings(): Boolean {
+        var owner: android.content.Context = context
+        while (owner is android.content.ContextWrapper && owner !is android.app.Activity) owner = owner.baseContext
+        val activity = owner as? android.app.Activity ?: return false
+        return smsNeedsSettings(
+            androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+            repository.preferences.getBoolean("sms_permission_requested", false),
+            androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.RECEIVE_SMS),
+        )
+    }
+    var smsSettingsRequired by remember { mutableStateOf(permissionNeedsSettings()) }
+    fun openSmsSettings() {
+        try {
+            context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.parse("package:${context.packageName}")))
+        } catch (_: Exception) { error = "Open Android Settings → Apps → Finance Ministry → Permissions → SMS." }
+    }
     var notificationAvailable by remember { mutableStateOf(`in`.financeministry.app.sms.TransactionNotifications.available(context)) }
     var filter by rememberSaveable { mutableStateOf("All") }
     var destination by rememberSaveable { mutableStateOf("Overview") }
@@ -132,12 +150,16 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     BackHandler(enabled = showBatch && destination == "Transactions" && !form) {
         showBatch = false; batchSelectedIds = arrayListOf()
     }
-    val smsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { captureEnabled = repository.captureAllowed() }
+    val smsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        captureEnabled = repository.captureAllowed()
+        smsSettingsRequired = permissionNeedsSettings()
+    }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         notificationAvailable = `in`.financeministry.app.sms.TransactionNotifications.available(context)
     }
     LaunchedEffect(refreshGeneration) {
         captureEnabled = repository.captureAllowed()
+        smsSettingsRequired = permissionNeedsSettings()
         notifications = repository.preferences.getBoolean("notifications", true)
         notificationAvailable = `in`.financeministry.app.sms.TransactionNotifications.available(context)
     }
@@ -276,16 +298,19 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     }
     Surface(Modifier.fillMaxSize()) {
         val ledgerScroll = rememberScrollState()
+        LaunchedEffect(settings, settingsSection) { ledgerScroll.scrollTo(0) }
         val pageModifier = Modifier.safeDrawingPadding().fillMaxSize().padding(16.dp)
-        Column(if (settings || (selected != null && !form)) pageModifier.verticalScroll(ledgerScroll) else pageModifier,
+        Column(if (!settings && selected != null && !form) pageModifier.verticalScroll(ledgerScroll) else pageModifier,
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (selectedId == null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            if (selectedId == null) FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                val largeText = androidx.compose.ui.platform.LocalConfiguration.current.fontScale >= 1.5f
                 val homeTitle = preferredName.trim().takeIf { it.isNotEmpty() }?.let { "Hi, $it" } ?: "Your overview"
                 Text(if (settings) settingsSection ?: "Settings" else when (destination) {
                     "Overview" -> homeTitle
                     "Transactions" -> "Transactions"
                     else -> "Review"
-                }, style = MaterialTheme.typography.headlineMedium)
+                }, style = if (largeText) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                    modifier = if (largeText) Modifier.fillMaxWidth() else Modifier.weight(1f))
                 TextButton(onClick = {
                     when {
                         settings && settingsSection != null -> settingsSection = null
@@ -335,6 +360,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                     }
                 } else Text(friendly(row.reviewState), style = MaterialTheme.typography.bodySmall)
                 Text(transactionTime(row.effectiveTimestamp))
+                if (row.sourceType == "SMS" && !row.isUserCorrected) Text("Date from SMS delivery, not the date written in the message. Delayed alerts may appear in a later month; Edit lets you correct the date.", style = MaterialTheme.typography.bodySmall)
                 row.linkedOriginalId?.let { originalId ->
                     TextButton(onClick = { selected = null; selectedId = originalId }) { Text("View linked original transaction") }
                     Text("Linked by matching reference, account, channel and full amount.", style = MaterialTheme.typography.bodySmall)
@@ -351,6 +377,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 }
                 TextButton(onClick = { deleteDialog = true }) { Text("Delete transaction") }
             } else if (settings) {
+                Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(ledgerScroll), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (settingsSection) {
                     null -> {
                         Text("Everyday tools and data controls", style = MaterialTheme.typography.bodyMedium)
@@ -381,9 +408,16 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         Text("Record supported bank alerts as transactions. You can always add or correct a transaction yourself.")
                         TextButton(onClick = { settingsSection = "Capture health" }) { Text("Capture health") }
                         Button(onClick = {
-                            if (captureEnabled) { repository.preferences.edit().putBoolean("sms_disclosure", false).apply(); captureEnabled = false } else disclosure = true
-                        }, enabled = !busy) { Text(if (captureEnabled) "Pause SMS capture" else "Enable SMS capture") }
-                        Text(if (captureEnabled) "SMS capture active" else "SMS capture paused or permission unavailable", style = MaterialTheme.typography.bodySmall)
+                            if (captureEnabled) { repository.preferences.edit().putBoolean("sms_disclosure", false).apply(); captureEnabled = false }
+                            else if (smsSettingsRequired && repository.preferences.getBoolean("sms_disclosure", false)) openSmsSettings()
+                            else disclosure = true
+                        }, enabled = !busy) { Text(if (captureEnabled) "Pause SMS capture" else if (smsSettingsRequired) "Open SMS permission settings" else "Enable SMS capture") }
+                        Text(when {
+                            captureEnabled -> "SMS capture active"
+                            context.checkSelfPermission(Manifest.permission.RECEIVE_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED -> "SMS permission not allowed · Manual entry still works"
+                            else -> "SMS capture paused · You can enable it above"
+                        }, style = MaterialTheme.typography.bodySmall)
+                        if (smsSettingsRequired) Text("Android is no longer showing the SMS permission prompt. Allow SMS in Android settings, then return here. Manual entry still works.", style = MaterialTheme.typography.bodySmall)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Recording notifications", Modifier.padding(top = 12.dp))
                             Switch(checked = notifications, onCheckedChange = {
@@ -422,10 +456,9 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                             settings = false; settingsSection = null; selected = null; selectedId = null; quickForm = false; form = true
                         })
                     "Data & privacy" -> {
-                        Text("Your ledger stays encrypted on this device. The app has no bank connection or payment access.")
-                        Text("Uninstalling or erasing removes this device's ledger. Create an encrypted backup in Backup & export first if you want to restore it later.")
-                        TextButton(onClick = { eraseDialog = true }, enabled = !busy) { Text("Erase all local data", color = MaterialTheme.colorScheme.error) }
+                        `in`.financeministry.app.feature.PrivacyPanel(onErase = { eraseDialog = true }, busy = busy)
                     }
+                }
                 }
             } else {
                 LazyColumn(Modifier.fillMaxWidth().weight(1f), state = ledgerListState,
@@ -472,7 +505,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                             }
                             if (showSummaryDetails) {
                                 AlertDialog(onDismissRequest = { showSummaryDetails = false }, title = { Text("How totals work") },
-                                    text = { Text("Money in and out cover the selected month. They exclude self transfers, card repayments, failed or unconfirmed payments, and reversed originals.\n\nYour spending includes personal and family payments, gifts, and only your share of group payments. Still owed includes unpaid amounts across all dates; the smaller line shows how much remains unpaid from payments in the selected month.\n\nThese are recorded transaction totals, not a verified account balance.") },
+                                    text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text("Money in and out cover the selected month. They exclude self transfers, card repayments, failed or unconfirmed payments, and reversed originals.\n\nYour spending includes personal and family payments, gifts, and only your share of group payments. Refunds are separate money-in entries; they do not subtract from Your spending.\n\nStill owed includes unpaid amounts across all dates; the smaller line shows how much remains unpaid from payments in the selected month.\n\nSMS dates use delivery time unless corrected. Missing or delayed alerts can affect month totals. These are recorded transaction totals, not a verified account balance.") } },
                                     confirmButton = { TextButton(onClick = { showSummaryDetails = false }) { Text("Got it") } })
                             }
                         } }
@@ -655,7 +688,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         FloatingActionButton(onClick = { selected = null; selectedId = null; form = true },
                             modifier = Modifier.semantics { contentDescription = "Add transaction" },
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp)) { Text("+ Add") }
+                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp)) { Text("+ Add", modifier = Modifier.padding(horizontal = 8.dp)) }
                     }
                 }
                 LedgerNavigation(destination) { next ->
@@ -707,7 +740,13 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
         }) { Text("Keep editing") } })
     if (disclosure) AlertDialog(onDismissRequest = { disclosure = false }, title = { Text("Read new SMS on this device?") },
         text = { Text("Android gives this app access to incoming SMS, including non-financial messages. Processing stays on this device. We reject OTPs and non-transactions and store normalized financial fields in encrypted storage. Raw messages and senders are not stored or uploaded. SMS permission is optional; manual entry always works. No payment or bank connection is involved.") },
-        confirmButton = { TextButton(onClick = { repository.preferences.edit().putBoolean("sms_disclosure", true).apply(); disclosure = false; smsPermission.launch(Manifest.permission.RECEIVE_SMS) }) { Text("I understand — continue") } },
+        confirmButton = { TextButton(onClick = {
+            repository.preferences.edit().putBoolean("sms_disclosure", true).apply(); disclosure = false
+            if (permissionNeedsSettings()) openSmsSettings() else {
+                repository.preferences.edit().putBoolean("sms_permission_requested", true).apply()
+                smsPermission.launch(Manifest.permission.RECEIVE_SMS)
+            }
+        }) { Text("I understand — continue") } },
         dismissButton = { TextButton(onClick = { disclosure = false }) { Text("Not now") } })
     if (eraseDialog) AlertDialog(onDismissRequest = { if (!busy) eraseDialog = false }, title = { Text("Erase all local data?") },
         text = { Text("Permanently deletes this device's transactions, corrections, encryption keys and settings. No automatic backup or undo is created. Previously exported backups are not deleted. SMS capture will be off.") },
@@ -901,19 +940,22 @@ private fun transactionLabels(row: TransactionEntity): String? = buildList {
     row.groupLabel?.takeIf { it.isNotBlank() }?.let(::add)
 }.joinToString(" · ").ifBlank { null }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun LedgerNavigation(destination: String, onNavigate: (String) -> Unit) {
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        LedgerNavigationButton("Overview", destination, "Open overview", onNavigate, Modifier.weight(1f))
-        LedgerNavigationButton("Transactions", destination, "Open transactions", onNavigate, Modifier.weight(1f))
-        LedgerNavigationButton("Review", destination, "Open review tab", onNavigate, Modifier.weight(1f))
+    val largeText = androidx.compose.ui.platform.LocalConfiguration.current.fontScale >= 1.5f
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        val itemModifier = if (largeText) Modifier else Modifier.weight(1f)
+        LedgerNavigationButton("Overview", destination, "Open overview", onNavigate, itemModifier)
+        LedgerNavigationButton("Transactions", destination, "Open transactions", onNavigate, itemModifier)
+        LedgerNavigationButton("Review", destination, "Open review tab", onNavigate, itemModifier)
     }
 }
 
 @Composable
 private fun LedgerNavigationButton(label: String, destination: String, description: String, onNavigate: (String) -> Unit, modifier: Modifier) {
-    TextButton(onClick = { onNavigate(label) }, modifier = modifier.semantics { contentDescription = description },
+    TextButton(onClick = { onNavigate(label) }, modifier = modifier.semantics { contentDescription = description; selected = destination == label },
         shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
         colors = ButtonDefaults.textButtonColors(
             contentColor = if (destination == label) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,

@@ -29,6 +29,8 @@ standard debug signer. Official release builds fail if the persistent signer is 
 2. Update `CHANGELOG.md`, including known issues and any upgrade restrictions.
 3. Review the source changes and stage only intended files. Run
    `python tools/verify_public_tree.py`; no private corpus or signing files may be tracked.
+   Before staging, `python tools/verify_public_tree.py --worktree` also checks current
+   changes and non-ignored new files. The default continues to audit the exact staged snapshot.
 4. Run relevant JVM and emulator tests. Build and lint with
    `./gradlew testDebugUnitTest lintDebug assembleDebug` from `android-app`.
 5. For schema changes, supply a non-destructive Room migration and test installing the
@@ -118,6 +120,23 @@ cancellation tests. Do not run test suites against a personal phone ledger.
 
 ### Multipart timing and background process recovery
 
+For a single-part automated system-SMS check, first build/install the app and
+instrumentation APK on a disposable emulator. From the repository root run:
+
+```powershell
+pwsh -NoProfile -File tools/verify-sms-e2e.ps1 -AdbPath '<SDK>/platform-tools/adb.exe' -Serial emulator-5556 -Repetitions 3
+```
+
+The serial must name an emulator, not a physical phone. The driver waits for each
+unique test-ready marker, injects synthetic INR 314.15 alerts, verifies sample count
+and the explicit instrumentation `OK (1 test)` result, and preserves temporary logs.
+It checks encrypted recording and active notification with the test's five-second
+observer limit. It does not validate carrier delivery or authenticate bank senders.
+CI now runs this after the default Android 16 instrumentation suite; other
+host-dependent upgrade, inbox and process-restart checks still require their own
+protocols below. Required alpha verification uses a normal debug signer, not the
+production candidate or official alpha signing certificate.
+
 On the same isolated emulator, run `SmsBroadcastE2eTest` with `runSmsE2e=true`,
 `smsRepetitions=20`, and `expectMultipart=true`. The host must watch
 `files/synthetic_sms_test_ready` using `run-as` and send exactly one synthetic SMS
@@ -151,3 +170,159 @@ without explaining that their unbacked ledger will be deleted.
 Before general use, verify real devices, upgrade paths, recovery/export strategy,
 privacy behavior and a hardened non-debug build. A successful debug build alone
 does not close those requirements.
+
+### Production upload signing (not the debug-alpha release)
+
+For a production candidate, set `FM_REQUIRE_RELEASE_SIGNING=true` and supply
+`FM_RELEASE_KEYSTORE`, `FM_RELEASE_STORE_PASSWORD`, `FM_RELEASE_KEY_ALIAS` and
+`FM_RELEASE_KEY_PASSWORD` securely in your build environment, then run
+`./gradlew :app:bundleRelease`. Never commit keystores, credentials or generated
+bundles. Release builds are non-debuggable, minified and resource-shrunk. Without
+credentials, local release builds are unsigned candidates, not distributable releases.
+The required-signing flag fails configuration when no upload keystore is provided.
+
+The upload key and the Play app-signing key are not necessarily the same key.
+Before publishing, decide the Play signing arrangement and verify certificate
+compatibility with existing alpha installations. A different app-signing certificate
+cannot update an existing installation: offer encrypted backup/recovery instructions,
+never silently recommend uninstalling an unbacked ledger. Signed production artifact
+validation, Play Console declarations/approval and physical-device testing remain
+separate release gates; configuring signing does not close them.
+
+## Play submission handoff — draft, not submitted
+
+Reviewed 3 October 2026. The items below describe the current offline, free build.
+Recheck them against the exact signed bundle and all active Play versions before
+submission. Adding billing, analytics, cloud sync or a new SDK requires another review.
+
+### Store listing copy
+
+- App name: **Finance Ministry** (owner must approve the name and independent positioning).
+- Suggested category: **Finance**.
+- Short description: **Track spending from SMS, review transactions, and keep your ledger on device.**
+- Website/source: https://github.com/hk121902-stack/finance-ministry
+- Support and privacy contact: owner must supply a monitored address for Play Console;
+  repository issues are not a substitute for required developer contact fields.
+- Privacy-policy URL: publish the reviewed `docs/PRIVACY.md` content as a stable public
+  HTML page; verify it loads without sign-in or geographic restrictions before entering
+  its URL. A local file or unhosted draft does not satisfy this requirement.
+
+Suggested full description:
+
+> Finance Ministry is an independent, open-source personal expense tracker. Its core
+> feature turns supported financial SMS alerts into an on-device ledger after you
+> choose to enable SMS access. It is not a government service, bank or payment app.
+>
+> See monthly money in, money out and your own share of spending. Label payments as
+> personal, family, for someone else or for a group, and track repayments separately.
+> Review uncertain detections, edit records and add cash or missing transactions manually.
+>
+> Optionally preview and import financial messages still in your SMS inbox from the
+> last three months. SMS access is optional; manual entry works without it. Notifications
+> are a separate choice and offer quick categorization and editing.
+>
+> No account, ads or app backend. Create a password-encrypted backup or export an
+> unencrypted CSV report to a location you choose. Keep the backup password safely;
+> it cannot be recovered. Exported files may be synced by your chosen storage provider.
+>
+> Message formats and Android delivery vary. The app can miss or misclassify a
+> transaction; review your ledger and do not use it as your only financial record.
+> It does not initiate payments, connect to bank accounts or provide investment advice.
+
+Do not advertise guaranteed accuracy, authenticated bank messages, real-time delivery,
+government affiliation, regulatory approval or production certification.
+
+### Restricted SMS declaration draft
+
+Proposed exception: **SMS-based money management**, subject to Google's review.
+This is not the SMS-based financial-transactions/payment-initiation use case.
+Declare only `RECEIVE_SMS` and `READ_SMS`, both actually present in the bundle.
+
+Suggested rationale:
+
+> The core feature is an automated personal spending ledger created from supported
+> financial SMS alerts. RECEIVE_SMS supports user-enabled new-alert recording;
+> READ_SMS supports a separately consented, user-initiated last-three-month inbox
+> import with preview, confirmation and undo. Processing and filtering happen on-device.
+> Raw message bodies and sender strings are not retained in the ledger or uploaded.
+> The app never sends SMS or initiates financial transactions. Users may decline
+> permissions and use manual entry; that fallback does not reproduce automatic capture
+> or historical financial-message import. Access is not used for advertising, profiling
+> or unrelated messages.
+
+Supply a fresh demo from the exact candidate showing disclosure before each prompt,
+permission denial/manual fallback, a synthetic eligible alert, uncertain-message review,
+historical import preview/confirmation/repeat deduplication, pause and erasure. Do not
+submit private inbox footage. Ensure the listing prominently describes SMS-based
+money management. Google's [permitted-use table](https://support.google.com/googleplay/android-developer/answer/10208820?hl=en)
+includes this exception but does not grant automatic approval. If rejected, do not
+work around the restriction with accessibility or notification scraping.
+
+### Data Safety and App content draft
+
+Current-build suggested answers, requiring owner review:
+
+- Developer-controlled collection or sharing: **none identified**. Financial SMS,
+  normalized ledger data and optional name/notes are processed locally. Review every
+  bundled SDK and active distribution version before answering the Console form.
+- User-chosen file exports: describe readable CSV and encrypted backups in the policy.
+  Apply the user-initiated-transfer exception only where the chosen export destination
+  and expected recipient satisfy it; do not claim files can never leave the device.
+- No account creation: account-deletion flow is not applicable to this accountless build.
+  In-app Erase all deletes local app data, not previously exported files or the SMS inbox.
+- Encryption-in-transit: do not infer a **Yes** from SQLCipher or backup encryption.
+  The app has no app-backend data transmission; answer the actual Console question
+  consistently with any provider behavior and data flows.
+- Ads and purchases/subscriptions: none in this build. Do not announce a trial or ₹30
+  renewal while billing and entitlement enforcement are absent.
+- App access: no login/test credentials; explain optional SMS permissions, manual entry
+  and how reviewers can use synthetic samples without a bank account.
+- Financial features: accurately declare expense/budget management using the Console's
+  available choices. Do not declare lending, payment execution, trading or investment
+  advice merely because an Investment category exists.
+- Content rating, target audience and developer identity: complete honestly in Console;
+  no rating or identity verification has been fabricated by this repository.
+
+Sources: [Data Safety guidance](https://support.google.com/googleplay/android-developer/answer/10787469?hl=en),
+[User Data/privacy policy requirements](https://support.google.com/googleplay/android-developer/answer/10144311?hl=en),
+[Financial Services declaration](https://support.google.com/googleplay/android-developer/answer/9876821?hl=en).
+On-device processing need not be declared as off-device collection, but it still needs
+transparent permission and privacy disclosures.
+
+### Owner-only gates before a production upload
+
+1. Confirm the Play developer account, verified identity, contact details and intended
+   countries; inspect the account's actual dashboard requirements.
+2. Choose and securely back up the production/upload signing arrangement. Compare the
+   Play app-signing certificate with the official alpha certificate before promising
+   in-place upgrades. Keep the app-signing/upload-key distinction explicit.
+3. Build the exact signed AAB with a new, increasing version code; verify its identity,
+   signature and non-debuggable configuration. Validate the Play-generated install
+   artifact, not just a separately signed local APK. Archive checksums and R8 mapping.
+4. Complete physical Redmi/background capture, reinstall/recovery and representative
+   device checks, including a 16 KB runtime. Static ELF/ZIP alignment alone is not runtime proof.
+5. Publish and verify the public policy URL, review listing/screenshots and submit
+   declarations. Production approval, not an exception rationale, is the gate.
+6. For personal accounts created after 13 November 2023, the current requirement is a
+   closed test with at least 12 testers continuously opted in for 14 days before applying
+   for production access. Determine applicability from the actual account; emulator runs
+   cannot substitute. See [official testing requirements](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en).
+7. Review the draft release and approve publication separately. Keep subscriptions
+   deferred until the chosen model and full billing lifecycle are implemented and tested.
+
+### Existing-alpha migration and rollback
+
+If certificates match, test the *previous official APK* → exact new signed candidate
+using the signed-upgrade protocol above, without uninstalling. Check amounts, corrections,
+repayments, custom categories, sources and settings after cold restart. A transition
+between locally test-signed debug/release builds is useful R8 validation, not this gate.
+
+If certificates differ, Android cannot replace that installation in place. Before any
+uninstall, create an encrypted backup in the old app, keep its password separately and
+validate restoration on a disposable fresh installation. Notify users that uninstall
+deletes their device ledger; CSV cannot restore it. The restored installation must
+reconfirm capture and reminders and review historical import matching.
+
+Stop rollout on data loss, incorrect totals, capture crashes or failed migration. Do
+not overwrite published artifacts or promise an Android downgrade. Prefer a corrected
+release with a higher version code; preserve backups before any manual recovery.

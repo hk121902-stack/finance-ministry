@@ -27,7 +27,16 @@ class CardBillPaymentIntegrationTest {
         val manager = context.getSystemService(NotificationManager::class.java)
         try {
             TransactionNotifications.post(context, item, true)
-            val notification = manager.activeNotifications.single { it.tag == item.id }.notification
+            // NotificationManager publishes asynchronously; a successful notify()
+            // binder call does not guarantee the next snapshot already contains it.
+            val deadline = android.os.SystemClock.elapsedRealtime() + 5000
+            var published = manager.activeNotifications.firstOrNull { it.tag == item.id }
+            while (published == null && android.os.SystemClock.elapsedRealtime() < deadline) {
+                android.os.SystemClock.sleep(25)
+                published = manager.activeNotifications.firstOrNull { it.tag == item.id }
+            }
+            assertNotNull("Card bill notification was not published within five seconds", published)
+            val notification = published!!.notification
             assertEquals("Card bill payment recorded", notification.extras.getString(Notification.EXTRA_TITLE))
             val text = notification.extras.getCharSequence(Notification.EXTRA_TEXT).toString()
             assertTrue(text.contains("Card bill payment")); assertFalse(text.contains("Money in"))
