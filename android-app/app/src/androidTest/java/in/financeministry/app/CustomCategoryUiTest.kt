@@ -24,14 +24,12 @@ class CustomCategoryUiTest {
         try {
             rule.setContent { MaterialTheme { TransactionForm(repository, null, onDone = {}) } }
             rule.onNodeWithText("Amount (INR)").performTextInput("125.00")
-            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
-                .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
             rule.waitForIdle()
             rule.onNodeWithText("Add category").performScrollTo().assertIsDisplayed().performClick()
             rule.waitUntil(15_000) { rule.onAllNodesWithText("New category name").fetchSemanticsNodes().isNotEmpty() }
             rule.onNodeWithText("New category name").performTextInput("School fees")
-            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
-                .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
             rule.waitForIdle()
             rule.onNodeWithText("Save category").assertIsDisplayed().performClick()
             rule.waitUntil(15_000) { rule.onAllNodesWithText("Category: School fees").fetchSemanticsNodes().isNotEmpty() }

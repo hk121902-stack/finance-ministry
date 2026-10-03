@@ -25,8 +25,7 @@ class CardBillPaymentUiTest {
         try {
             rule.setContent { MaterialTheme { TransactionForm(repo, null, onDone = {}) } }
             rule.onNodeWithText("Amount (INR)").performTextInput("1000")
-            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
-                .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
             rule.waitForIdle()
             rule.onNodeWithText("Card bill payment").performClick()
             rule.onNodeWithText("Bank payment").assertIsSelected()
