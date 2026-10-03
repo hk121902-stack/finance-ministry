@@ -122,7 +122,14 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     var reviewAvailable by remember { mutableStateOf(false) }
     var reviewCount by remember { mutableIntStateOf(0) }
     var selectedMonth by rememberSaveable { mutableStateOf(java.time.YearMonth.now().toString()) }
-    var showGuide by remember { mutableStateOf(!repository.preferences.getBoolean("onboarding_complete", false)) }
+    var showGuide by key(BuildConfig.VERSION_CODE) { rememberSaveable { mutableStateOf(`in`.financeministry.app.feature.shouldShowAppTour(
+        repository.preferences.getInt(`in`.financeministry.app.feature.APP_TOUR_VERSION_KEY, 0), BuildConfig.VERSION_CODE)) } }
+    val tourIsUpdate = repository.preferences.getBoolean("onboarding_complete", false)
+    fun finishGuide() {
+        repository.preferences.edit().putBoolean("onboarding_complete", true)
+            .putInt(`in`.financeministry.app.feature.APP_TOUR_VERSION_KEY, BuildConfig.VERSION_CODE).apply()
+        showGuide = false
+    }
     var paymentSources by remember { mutableStateOf(emptyList<PaymentSourceEntity>()) }
     var availableCategories by remember { mutableStateOf(transactionCategories) }
     var showSummaryDetails by rememberSaveable { mutableStateOf(false) }
@@ -392,7 +399,10 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         }
                         SettingsRow("Review reminders", if (repository.preferences.getBoolean("review_reminder", false)) "Daily reminder is on" else "Off") { settingsSection = "Review reminders" }
                         SettingsRow("Data and privacy", "Local storage, erasure and recovery") { settingsSection = "Data & privacy" }
-                        SettingsRow("Getting started", "Review the setup checklist") { showGuide = true; settings = false; settingsSection = null }
+                        SettingsRow("App tour", "Explore features and optional setup again") {
+                            showGuide = true; settings = false; settingsSection = null; destination = "Overview"
+                            scope.launch { ledgerListState.scrollToItem(0) }
+                        }
                     }
                     "Personalization" -> {
                         Text("A name is optional and stays on this device.", style = MaterialTheme.typography.bodySmall)
@@ -443,7 +453,8 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         onBusyChange = { busy = it }, onRestored = {
                             preferredName = repository.preferences.getString("preferred_name", "").orEmpty()
                             captureEnabled = repository.captureAllowed(); notifications = repository.preferences.getBoolean("notifications", true)
-                            showGuide = !repository.preferences.getBoolean("onboarding_complete", false)
+                            showGuide = `in`.financeministry.app.feature.shouldShowAppTour(
+                                repository.preferences.getInt(`in`.financeministry.app.feature.APP_TOUR_VERSION_KEY, 0), BuildConfig.VERSION_CODE)
                         })
                     "Category rules" -> `in`.financeministry.app.feature.CategoryRulesPanel(repository,
                         onConflict = { id -> settings = false; selected = null; selectedId = id; quickForm = true; form = true },
@@ -467,11 +478,13 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 if (destination == "Overview" && showGuide) item {
                     `in`.financeministry.app.feature.FirstUseGuide(captureEnabled, paymentSources.any { it.active },
                         repository.preferences.getBoolean("review_reminder", false),
-                        onDone = { repository.preferences.edit().putBoolean("onboarding_complete", true).apply(); showGuide = false },
-                        onAdd = { repository.preferences.edit().putBoolean("onboarding_complete", true).apply(); showGuide = false; selected = null; selectedId = null; form = true },
-                        onOpenSms = { showGuide = false; settings = true; settingsSection = "SMS & messages" },
-                        onOpenSources = { showGuide = false; settings = true; settingsSection = "Payment sources" },
-                        onOpenReminder = { showGuide = false; settings = true; settingsSection = "Review reminders" })
+                        onDone = { finishGuide() },
+                        onAdd = { finishGuide(); selected = null; selectedId = null; form = true },
+                        onOpenSms = { finishGuide(); settings = true; settingsSection = "SMS & messages" },
+                        onOpenSources = { finishGuide(); settings = true; settingsSection = "Payment sources" },
+                        onOpenReminder = { finishGuide(); settings = true; settingsSection = "Review reminders" },
+                        isUpdate = tourIsUpdate,
+                        onChapterChanged = { scope.launch { ledgerListState.scrollToItem(0) } })
                 }
                 if (destination == "Overview") item {
                     snapshot?.let {

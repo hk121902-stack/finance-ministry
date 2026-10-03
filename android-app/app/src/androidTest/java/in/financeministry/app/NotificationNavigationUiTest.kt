@@ -13,9 +13,11 @@ class NotificationNavigationUiTest {
         val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<FinanceMinistryApp>()
         val repository = app.container.repository
         val onboardingComplete = repository.preferences.getBoolean("onboarding_complete", false)
+        val originalTourVersion = repository.preferences.getInt(`in`.financeministry.app.feature.APP_TOUR_VERSION_KEY, 0)
         // This test exercises a returning user's notification path. Fresh-install onboarding
-        // is verified separately by AppLaunchSmokeTest.
-        repository.preferences.edit().putBoolean("onboarding_complete", true).commit()
+        // is verified separately by AppTourLifecycleUiTest.
+        repository.preferences.edit().putBoolean("onboarding_complete", true)
+            .putInt(`in`.financeministry.app.feature.APP_TOUR_VERSION_KEY, BuildConfig.VERSION_CODE).commit()
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().startActivitySync(
             android.content.Intent(app, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
         val manager = app.getSystemService(android.app.NotificationManager::class.java)
@@ -79,7 +81,8 @@ class NotificationNavigationUiTest {
             rule.onNodeWithContentDescription("Open overview").assertIsDisplayed()
         } finally {
             runBlocking { repository.delete(first); repository.delete(second) }
-            repository.preferences.edit().putBoolean("onboarding_complete", onboardingComplete).commit()
+            repository.preferences.edit().putBoolean("onboarding_complete", onboardingComplete)
+                .putInt(`in`.financeministry.app.feature.APP_TOUR_VERSION_KEY, originalTourVersion).commit()
             // PendingIntent delivery can create another activity task. Finish test-owned
             // MainActivity instances before ActivityScenario performs its teardown.
             androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().runOnMainSync {

@@ -4,6 +4,21 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.1.0-alpha.18
+
+- Replace the short first-use checklist with a guided App tour covering recording,
+  totals, transactions and batch edits, categories and purpose, breakdown and
+  budgets, review, repayments, sources and card bills, rules, reminders, widget,
+  historical import, backup/export, personalization and privacy.
+- Offer the tour on first launch and once after every app update. Skip at any
+  chapter, use Back/Next, expand More detail, or replay from Settings. Optional
+  setup links never enable SMS capture or request permissions automatically.
+- Keep existing transactions, accounting, database schema and user settings
+  unchanged. Tour progress is local to the installation, not imported from backups.
+- Known limitations: this is still a debuggable GitHub alpha, not a Google Play
+  production release. Supported SMS formats and device background restrictions
+  remain subject to the existing parser and physical-device testing limitations.
+
 ## 0.1.0-alpha.17
 
 - Reject more explicitly negated SMS movements and keep conversational, conditional

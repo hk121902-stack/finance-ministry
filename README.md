@@ -6,13 +6,17 @@ An Android expense tracker that records transactions from incoming SMS and lets 
 
 **Status: early alpha.** The release channel is for installable **debug APKs** for testing. The app is being developed by one maintainer and is not ready for general use. Parsing can miss or misclassify transactions; check your records. Do not make this your only financial record.
 
-The release candidate in this repository is **v0.1.0-alpha.17**. The latest published
+The release candidate in this repository is **v0.1.0-alpha.18**. The latest published
 debug alpha remains available from [GitHub Releases](https://github.com/hk121902-stack/finance-ministry/releases).
 Download the debug APK from its assets. The release includes its SHA-256 checksum,
 signing-certificate details, and license notices. Physical-device testing is pending.
 
 ## What works today
 
+- Explore a skippable, twelve-chapter **App tour** on first launch and once after
+  each update. Back/Next and optional More detail explain all current features;
+  replay it from Settings. Finishing or skipping stops repeat prompts for that
+  version. Optional setup never grants permissions or enables capture by itself.
 - Capture new financial SMS after you explicitly enable SMS access.
 - Save a normalized transaction first, then send an optional native notification with **View** and **Edit**.
 - Keep uncertain detections in **Review**, including transactions whose amount could not be safely extracted.

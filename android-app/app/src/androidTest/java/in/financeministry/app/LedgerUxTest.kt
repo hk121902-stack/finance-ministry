@@ -364,7 +364,13 @@ class LedgerUxTest {
             assertEquals("NeedsReview", runBlocking { repository.get(transactionId!!)!!.reviewState })
             sourceId = runBlocking { repository.addPaymentSource(nickname, "Bank account", `in`.financeministry.app.core.model.Channel.UPI, "Test bank", "6789").id }
 
-            rule.onNodeWithContentDescription("Open overview").performClick()
+            // Wait for the all-dates queue refresh, rather than racing the Overview's
+            // asynchronous month snapshot immediately after ingest/source creation.
+            val pendingCount = runBlocking { repository.reviewCount() }
+            rule.onNodeWithContentDescription("Open review tab").performClick()
+            rule.waitUntil(15_000) {
+                rule.onAllNodesWithText("All dates · $pendingCount remaining").fetchSemanticsNodes().isNotEmpty()
+            }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("₹87.65"))
             rule.onNodeWithText("₹87.65").performClick()
             rule.onNodeWithText("Choose payment source").performClick()

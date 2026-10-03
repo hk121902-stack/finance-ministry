@@ -21,8 +21,10 @@ class VisualParityUiTest {
         val variant = InstrumentationRegistry.getArguments().getString("visualVariant") ?: "light"
         val originalName = repository.preferences.getString("preferred_name", "").orEmpty()
         val originalOnboarding = repository.preferences.getBoolean("onboarding_complete", false)
+        val originalTourVersion = repository.preferences.getInt(`in`.financeministry.app.feature.APP_TOUR_VERSION_KEY, 0)
         val ids = runBlocking {
-            repository.preferences.edit().putString("preferred_name", "Himanshu").putBoolean("onboarding_complete", true).commit()
+            repository.preferences.edit().putString("preferred_name", "Himanshu").putBoolean("onboarding_complete", true)
+                .putInt(`in`.financeministry.app.feature.APP_TOUR_VERSION_KEY, BuildConfig.VERSION_CODE).commit()
             listOf(
                 repository.save(ManualInput("3000", Direction.Debit, System.currentTimeMillis() - 3000,
                     TransactionType.Other, label = "Group dinner", category = "Food", ownership = SpendingOwnership.Group,
@@ -89,7 +91,8 @@ class VisualParityUiTest {
                 ids.forEach { repository.delete(it) }
             }
             repository.preferences.edit().putString("preferred_name", originalName)
-                .putBoolean("onboarding_complete", originalOnboarding).commit()
+                .putBoolean("onboarding_complete", originalOnboarding)
+                .putInt(`in`.financeministry.app.feature.APP_TOUR_VERSION_KEY, originalTourVersion).commit()
         }
     }
 
