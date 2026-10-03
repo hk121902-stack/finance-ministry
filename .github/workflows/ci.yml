@@ -86,7 +86,10 @@ jobs:
           booted=false
           for attempt in $(seq 1 150); do
             if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == '1' ]]; then booted=true; break; fi
-            kill -0 "$emulator_pid"
+            if ! kill -0 "$emulator_pid" 2>/dev/null; then
+              cat "$RUNNER_TEMP/emulator.log"
+              exit 1
+            fi
             sleep 2
           done
           test "$booted" = true
@@ -109,5 +112,6 @@ jobs:
           path: |
             android-app/app/build/reports/androidTests/
             android-app/app/build/outputs/androidTest-results/
+            ${{ runner.temp }}/emulator.log
           retention-days: 14
           if-no-files-found: ignore
