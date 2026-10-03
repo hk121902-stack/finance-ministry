@@ -25,9 +25,12 @@ class CardBillPaymentUiTest {
         try {
             rule.setContent { MaterialTheme { TransactionForm(repo, null, onDone = {}) } }
             rule.onNodeWithText("Amount (INR)").performTextInput("1000")
+            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            rule.waitForIdle()
             rule.onNodeWithText("Card bill payment").performClick()
             rule.onNodeWithText("Bank payment").assertIsSelected()
-            rule.onNodeWithText("Save transaction").performClick()
+            rule.onNodeWithText("Save transaction").assertIsDisplayed().performClick()
             rule.waitUntil(15_000) { runBlocking { repo.snapshot().rows.size == 1 } }
             assertEquals("CardRepayment", runBlocking { repo.snapshot().rows.single().transactionType })
             assertEquals("0", runBlocking { repo.snapshot().debit.toString() })

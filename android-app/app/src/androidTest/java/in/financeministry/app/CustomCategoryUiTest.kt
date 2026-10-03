@@ -24,11 +24,18 @@ class CustomCategoryUiTest {
         try {
             rule.setContent { MaterialTheme { TransactionForm(repository, null, onDone = {}) } }
             rule.onNodeWithText("Amount (INR)").performTextInput("125.00")
-            rule.onNodeWithText("Add category").performScrollTo().performClick()
+            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            rule.waitForIdle()
+            rule.onNodeWithText("Add category").performScrollTo().assertIsDisplayed().performClick()
+            rule.waitUntil(15_000) { rule.onAllNodesWithText("New category name").fetchSemanticsNodes().isNotEmpty() }
             rule.onNodeWithText("New category name").performTextInput("School fees")
-            rule.onNodeWithText("Save category").performClick()
+            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            rule.waitForIdle()
+            rule.onNodeWithText("Save category").assertIsDisplayed().performClick()
             rule.waitUntil(15_000) { rule.onAllNodesWithText("Category: School fees").fetchSemanticsNodes().isNotEmpty() }
-            rule.onNodeWithText("Save transaction").performClick()
+            rule.onNodeWithText("Save transaction").assertIsDisplayed().performClick()
             rule.waitUntil(15_000) { runBlocking { repository.snapshot().rows.size == 1 } }
             val saved = runBlocking { repository.snapshot().rows.single() }
             assertEquals(12500L, saved.amountMinor)
