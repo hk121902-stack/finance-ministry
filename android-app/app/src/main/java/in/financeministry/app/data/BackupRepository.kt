@@ -12,12 +12,13 @@ import java.math.BigInteger
 /** No database/Keystore keys or raw SMS are exported. Data is re-encrypted under the destination's key. */
 class BackupPreview internal constructor(internal val data: String, internal val eraseGeneration: Long,
     val transactionCount: Int, val repaymentCount: Int, val sourceCount: Int, val ruleCount: Int,
-    val budgetCount: Int, val recurringReminderCount: Int, val createdAt: Long)
+    val budgetCount: Int, val recurringReminderCount: Int, val createdAt: Long,
+    val memberCount: Int = 0, val groupShareCount: Int = 0)
 class PreparedBackup internal constructor(val bytes: ByteArray, val revision: Long)
 data class RestoreResult(val settingsApplied: Boolean)
 
 // Parent-before-child order; reverse order deletes safely within the restore transaction.
-internal val backupTables = listOf("payment_sources", "import_batches", "transactions", "corrections", "repayments", "category_rules", "match_decisions", "budgets", "recurring_reminders")
+internal val backupTables = listOf("payment_sources", "import_batches", "local_members", "transactions", "corrections", "group_shares", "repayments", "category_rules", "match_decisions", "budgets", "recurring_reminders")
 private val backupPreferences = setOf("preferred_name", "onboarding_complete", "notifications", "review_reminder_hour", "review_reminder_minute")
 
 private fun TransactionRepository.installationId(): String = preferences.getString("installation_id", null)
@@ -57,7 +58,7 @@ suspend fun TransactionRepository.createEncryptedBackup(password: CharArray): By
 
 suspend fun TransactionRepository.prepareBackup(password: CharArray): PreparedBackup = withLedger { db ->
     val data = backupData(db)
-    val plain = JSONObject().put("format", 2).put("schema", 7).put("createdAt", System.currentTimeMillis())
+    val plain = JSONObject().put("format", 2).put("schema", 8).put("createdAt", System.currentTimeMillis())
         .put("origin", installationId()).put("fingerprintHistoryRequiresReview", db.transactions().metadata("foreign_restore") == "true")
         .put("data", data).toString().toByteArray(Charsets.UTF_8)
     try {
@@ -105,7 +106,8 @@ suspend fun TransactionRepository.previewBackup(encrypted: ByteArray, password: 
     BackupPreview(root.toString(), eraseGeneration.value, tables.getJSONArray("transactions").length(),
         tables.getJSONArray("repayments").length(), tables.getJSONArray("payment_sources").length(),
         tables.getJSONArray("category_rules").length(), tables.getJSONArray("budgets").length(),
-        tables.getJSONArray("recurring_reminders").length(), root.getLong("createdAt"))
+        tables.getJSONArray("recurring_reminders").length(), root.getLong("createdAt"),
+        tables.getJSONArray("local_members").length(), tables.getJSONArray("group_shares").length())
 }
 
 suspend fun TransactionRepository.hasBackupData(): Boolean = withLedger { db -> hasBackupData(db) }
@@ -204,7 +206,18 @@ private fun validateBackup(root: JSONObject, db: FinanceDatabase) {
     if (root.optInt("format") == 1 && root.optInt("schema") == 7) {
         root.getJSONObject("data").put("customCategories", JSONArray()); root.put("format", 2)
     }
-    require(root.optInt("format") == 2 && root.optInt("schema") == 7 && root.optLong("createdAt") > 0 && root.optString("origin").length in 1..80) {
+    if (root.optInt("format") == 2 && root.optInt("schema") == 7) {
+        val oldTables = root.getJSONObject("data").getJSONObject("tables")
+        require(!oldTables.has("local_members") && !oldTables.has("group_shares")) { "Unexpected legacy backup table." }
+        val receipts = oldTables.getJSONArray("repayments")
+        for (i in 0 until receipts.length()) {
+            val receipt = receipts.getJSONObject(i)
+            require(!receipt.has("memberId")) { "Unexpected legacy repayment field." }
+            receipt.put("memberId", JSONObject.NULL)
+        }
+        oldTables.put("local_members", JSONArray()).put("group_shares", JSONArray()); root.put("schema", 8)
+    }
+    require(root.optInt("format") == 2 && root.optInt("schema") == 8 && root.optLong("createdAt") > 0 && root.optString("origin").length in 1..80) {
         "Unsupported backup version. Your ledger was not changed."
     }
     val data = root.getJSONObject("data")
@@ -300,6 +313,7 @@ private fun validateBackup(root: JSONObject, db: FinanceDatabase) {
         if (!row.isNull("linkedOriginalId")) require(row.getString("linkedOriginalId") in transactions) { "Linked transaction is missing." }
         if (!row.isNull("duplicateOfId")) require(row.getString("duplicateOfId") in transactions && row.getString("duplicateOfId") != row.getString("id")) { "Invalid duplicate link." }
     }
+    validateGroupBackup(rowsByTable)
     val expenseTotals = mutableMapOf<String, BigInteger>()
     val creditTotals = mutableMapOf<String, BigInteger>()
     for (r in rowsByTable.getValue("repayments").values) {
@@ -342,6 +356,9 @@ private fun validateBackup(root: JSONObject, db: FinanceDatabase) {
 suspend fun TransactionRepository.csvReport(start: Long, end: Long): String = withLedger { db ->
     require(start < end) { "Choose a valid period." }
     val sources = db.transactions().allSources().associateBy { it.id }
+    val members = db.transactions().members().associateBy { it.id }
+    val shares = db.transactions().groupShares().groupBy { it.expenseId }
+    val receipts = db.transactions().repayments()
     val reversed = db.transactions().reversedOriginals().toSet()
     fun exclusion(r: TransactionEntity): String = when {
         r.id in reversed -> "Linked reversal"
@@ -361,7 +378,7 @@ suspend fun TransactionRepository.csvReport(start: Long, end: Long): String = wi
         return "\"${safe.replace("\"", "\"\"")}\""
     }
     buildString {
-        append("Date,Label,Amount INR,Direction,Category,Purpose,Source,Repayment expected,Repaid INR,Review state,Currency,Status,Transaction type,Source type,Personal share INR,Linked original ID,Duplicate of ID,Excluded from totals reason,Money out contribution INR,Money in contribution INR,Your spending contribution INR,Record ID,CSV schema version\r\n")
+        append("Date,Label,Amount INR,Direction,Category,Purpose,Source,Repayment expected,Repaid INR,Review state,Currency,Status,Transaction type,Source type,Personal share INR,Linked original ID,Duplicate of ID,Excluded from totals reason,Money out contribution INR,Money in contribution INR,Your spending contribution INR,Record ID,CSV schema version,Individual shares INR,Individual repayments INR,Individual still owed INR\r\n")
         db.transactions().between(start, end).sortedBy { it.effectiveTimestamp }.forEach { r ->
             val eligible = RepaymentAccounting.eligible(r, reversed)
             val debit = eligible && r.direction == "Debit"
@@ -373,7 +390,13 @@ suspend fun TransactionRepository.csvReport(start: Long, end: Long): String = wi
                 r.currency.orEmpty(), r.status, r.transactionType, r.sourceType,
                 r.personalShareMinor?.let(::decimal).orEmpty(), r.linkedOriginalId.orEmpty(), r.duplicateOfId.orEmpty(), exclusion(r),
                 decimal(if (debit) r.amountMinor!! else 0), decimal(if (credit) r.amountMinor!! else 0),
-                decimal(if (debit) RepaymentAccounting.personal(r) else 0), r.id, "2")
+                decimal(if (debit) RepaymentAccounting.personal(r) else 0), r.id, "3",
+                shares[r.id].orEmpty().joinToString("; ") { "${members[it.memberId]?.name.orEmpty()}: ${decimal(it.amountMinor)}" },
+                shares[r.id].orEmpty().joinToString("; ") { share ->
+                    val received = share.amountMinor - GroupSplitAccounting.owed(share, receipts)
+                    "${members[share.memberId]?.name.orEmpty()}: ${decimal(received)}"
+                },
+                shares[r.id].orEmpty().joinToString("; ") { "${members[it.memberId]?.name.orEmpty()}: ${decimal(GroupSplitAccounting.owed(it, receipts))}" })
             append(values.joinToString(",", transform = ::cell)); append("\r\n")
         }
     }

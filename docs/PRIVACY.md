@@ -1,6 +1,6 @@
 # Privacy and data handling
 
-Updated 3 October 2026. Finance Ministry is an independent open-source app
+Updated 11 October 2026. Finance Ministry is an independent open-source app
 maintained by hk121902-stack, not a government service or a bank. Support is
 available through [GitHub issues](https://github.com/hk121902-stack/finance-ministry/issues);
 share synthetic examples only. Use the private reporting route in SECURITY.md
@@ -45,6 +45,13 @@ Raw SMS bodies and sender values are processed transiently and are not database
 columns. No raw-message debug logging or upload feature is included. Input filtering
 cannot prove arbitrary manually entered text is non-sensitive; do not paste messages,
 contact names, full account numbers, UPI IDs or OTPs into labels or notes.
+
+The unreleased local group-split feature stores optional reusable participant
+nicknames, stable local IDs, individual shares and settlement allocations in the
+encrypted ledger. Use nicknames, not contact details. It never reads contacts,
+invites people or syncs balances. Encrypted backups include these records; CSV
+schema 3 adds participant names, shares, received amounts and unpaid amounts.
+Those CSV fields are readable by anyone who can access the exported file.
 
 SQLCipher encrypts the database. Android Keystore protects a wrapping key and source
 HMAC key; the wrapped database password is held in private app preferences. Database

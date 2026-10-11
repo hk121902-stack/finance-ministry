@@ -4,6 +4,30 @@ User-visible changes are recorded here. Pre-1.0 releases are experimental.
 
 ## Unreleased
 
+## 0.1.0-alpha.20
+
+- Split a repayable Group expense between You and named local people. Equal splits
+  preserve every paise; Custom splits must total the expense exactly. Reuse or rename
+  nicknames without contacts access, invitations or cloud sync.
+- Show individual Outstanding/Settled balances and record partial/full settlements
+  against one person. Link an existing incoming payment without counting income twice,
+  or record a cash receipt. Keep Save/Apply above the keyboard and protect unsaved drafts.
+- Preserve older unnamed balances without guessing participants. Unlink existing
+  repayments before reallocating shares; unlinking keeps the incoming payment record.
+- Add non-destructive Room schema 7→8 migration and validated encrypted backup support
+  for people, shares and individual settlements. Older schema-7 backups remain readable;
+  backups created by this release require alpha.20 or later. Do not downgrade an updated
+  installation. CSV schema 3 includes participant names, shares and settlement amounts;
+  it is an unencrypted report, not a restore backup.
+- Prevent an untouched transaction editor from dismissing/flickering when scrolling
+  downward at the top. Retain the current palette and existing transaction accounting.
+- Verification: 135 JVM tests; 16 targeted data/migration/backup/export checks; eight
+  group UI flows in normal light and compact dark/larger-text emulator configurations.
+  The compact-screen rendering crash found during validation was fixed and rerun.
+  CI verification is required before publication. Signed artifact upgrade/recovery and
+  physical-device/OEM checks remain separate gates; this is a debuggable testing alpha,
+  not a Google Play or general-use production release.
+
 ## 0.1.0-alpha.19
 
 - Simplify money owed: record money received directly from an outstanding expense,

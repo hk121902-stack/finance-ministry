@@ -11,6 +11,22 @@ class DatabaseMigrationTest {
     @get:Rule val helper = MigrationTestHelper(
         InstrumentationRegistry.getInstrumentation(), FinanceDatabase::class.java)
 
+    @Test fun schema_seven_upgrade_keeps_legacy_balances_unassigned() {
+        helper.createDatabase("migration-7-8", 7).apply {
+            execSQL("INSERT INTO transactions (id, sourceType, sourceTimestamp, effectiveTimestamp, amountMinor, currency, direction, status, channel, transactionType, confidence, reviewState, parserVersion, isUserCorrected, createdAt, updatedAt, category, ownership, groupLabel, personalShareMinor, repaidMinor, repaymentExpected, categoryNeedsReview) VALUES ('dinner', 'Manual', 10, 10, 90000, 'INR', 'Debit', 'Successful', 'CashManual', 'Other', 0, 'Confirmed', 0, 1, 10, 10, 'Food', 'Group', 'Friends', 30000, 10000, 1, 0)")
+            execSQL("INSERT INTO repayments VALUES ('old', 'dinner', NULL, 10000, NULL, 'Alice', 'Legacy', 10)")
+            close()
+        }
+        helper.runMigrationsAndValidate("migration-7-8", 8, true, FinanceDatabase.MIGRATION_7_8).use { db ->
+            db.query("SELECT amountMinor, personalShareMinor, repaidMinor FROM transactions WHERE id='dinner'").use {
+                assertTrue(it.moveToFirst()); assertEquals(90000L, it.getLong(0)); assertEquals(30000L, it.getLong(1)); assertEquals(10000L, it.getLong(2))
+            }
+            db.query("SELECT memberId FROM repayments WHERE id='old'").use { assertTrue(it.moveToFirst()); assertTrue(it.isNull(0)) }
+            db.query("SELECT COUNT(*) FROM group_shares").use { assertTrue(it.moveToFirst()); assertEquals(0, it.getInt(0)) }
+            db.query("SELECT COUNT(*) FROM local_members").use { assertTrue(it.moveToFirst()); assertEquals(0, it.getInt(0)) }
+        }
+    }
+
     @Test fun published_schema_four_migrates_to_seven_without_losing_ledger_or_creating_debt() {
         helper.createDatabase("migration-4-7", 4).apply {
             execSQL("INSERT INTO transactions (id, sourceType, sourceTimestamp, effectiveTimestamp, amountMinor, currency, direction, status, channel, transactionType, confidence, reviewState, parserVersion, isUserCorrected, createdAt, updatedAt, category, ownership, repaidMinor) VALUES ('legacy', 'Manual', 10, 10, 4200, 'INR', 'Debit', 'Successful', 'CashManual', 'Other', 0, 'Confirmed', 0, 1, 10, 10, 'Food', 'Personal', 0)")

@@ -40,7 +40,9 @@ class BackupUiTest {
     }
     private fun savePickerFile(name: String) {
         var field: AccessibilityNodeInfo? = null
-        rule.waitUntil(15000) {
+        // Preparing the encrypted file precedes DocumentsUI: allow the same
+        // bounded worker budget as waitForMessage, not a 15s UI-only budget.
+        rule.waitUntil(60000) {
             field = pickerNodes().firstOrNull { it.className?.toString() == "android.widget.EditText" }
             field != null
         }

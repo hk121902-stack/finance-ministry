@@ -6,6 +6,7 @@ data class RepaymentSummary(
     val outstanding: BigInteger, val newlyOwed: BigInteger,
     val received: BigInteger, val monthOutstanding: BigInteger,
     val expenses: List<TransactionEntity>, val repayments: List<RepaymentEntity>,
+    val shares: List<GroupShareEntity> = emptyList(), val members: List<LocalMemberEntity> = emptyList(),
 )
 
 object RepaymentAccounting {

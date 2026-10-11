@@ -31,6 +31,9 @@ fun RepaymentsScreen(repository: TransactionRepository, month: LocalDate, onBack
     var monthOnly by rememberSaveable { mutableStateOf(false) }
     var group by rememberSaveable { mutableStateOf<String?>(null) }
     var recordingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var recordingMemberId by rememberSaveable { mutableStateOf<String?>(null) }
+    var personId by rememberSaveable { mutableStateOf<String?>(null) }
+    var peopleView by rememberSaveable { mutableStateOf(true) }
     var monthDetails by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(month, revision, retry) {
         error = false
@@ -39,7 +42,7 @@ fun RepaymentsScreen(repository: TransactionRepository, month: LocalDate, onBack
         catch (_: Exception) { error = true }
     }
     fun groupKey(row: TransactionEntity) = row.ownership + ":" + row.groupLabel.orEmpty().trim().lowercase(Locale.ROOT)
-    val leave = { if (group != null) group = null else onBack() }
+    val leave = { if (personId != null) personId = null else if (group != null) group = null else onBack() }
     BackHandler(onBack = leave)
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.safeDrawingPadding().fillMaxSize().padding(horizontal = 20.dp)) {
@@ -57,15 +60,19 @@ fun RepaymentsScreen(repository: TransactionRepository, month: LocalDate, onBack
                         Instant.ofEpochMilli(it.effectiveTimestamp).atZone(ZoneId.systemDefault()).toLocalDate().withDayOfMonth(1) == month.withDayOfMonth(1))
                 }
                 val groups = expenses.groupBy(::groupKey).toSortedMap()
+                val periodExpenses = data.expenses.filter { !monthOnly || Instant.ofEpochMilli(it.effectiveTimestamp).atZone(ZoneId.systemDefault()).toLocalDate().withDayOfMonth(1) == month.withDayOfMonth(1) }
+                val periodIds = periodExpenses.map { it.id }.toSet()
+                val personShares = data.shares.filter { it.expenseId in periodIds && (GroupSplitAccounting.owed(it, data.repayments) == 0L) == settled }
+                val byPerson = personShares.groupBy { it.memberId }
                 LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    if (group == null) {
+                    if (group == null && personId == null) {
                         item {
                             Text(money(data.outstanding), style = MaterialTheme.typography.headlineLarge)
                             Text("Still owed · all dates", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         item {
-                            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text(monthName, style = MaterialTheme.typography.titleMedium)
                                     RepaymentMetric("Still unpaid from this month's payments", data.monthOutstanding)
@@ -89,10 +96,30 @@ fun RepaymentsScreen(repository: TransactionRepository, month: LocalDate, onBack
                                 Text("Only payments made in $monthName", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                             }
                             Text("Names are local labels only; no contacts are accessed or invited.", style = MaterialTheme.typography.bodySmall)
+                            if (data.shares.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(peopleView, { peopleView = true }, label = { Text("By person") })
+                                FilterChip(!peopleView, { peopleView = false }, label = { Text("By group") })
+                            }
                         }
-                        if (groups.isEmpty()) item { Text(if (settled) "No settled expenses in this view." else "Nothing outstanding in this view.") }
-                        items(groups.keys.toList(), key = { it }) { key ->
-                            val records = groups.getValue(key)
+                        if (peopleView) items(byPerson.keys.sortedBy { id -> data.members.firstOrNull { it.id == id }?.name }, key = { "person:$it" }) { id ->
+                            val name = data.members.firstOrNull { it.id == id }?.name ?: "Local person"
+                            val owed = byPerson.getValue(id).fold(BigInteger.ZERO) { n, share -> n + BigInteger.valueOf(GroupSplitAccounting.owed(share, data.repayments)) }
+                            Column(Modifier.fillMaxWidth().clickable { personId = id }.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                                    Text(if (owed.signum() == 0) "Settled" else "Owes ${money(owed)}", style = MaterialTheme.typography.titleMedium)
+                                }
+                                val count = byPerson.getValue(id).size
+                                Text("$count shared expense${if (count == 1) "" else "s"} · View balances & repayments", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                HorizontalDivider(Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
+                            }
+                        }
+                        if (groups.isEmpty() && (!peopleView || byPerson.isEmpty())) item { Text(if (settled) "No settled expenses in this view." else "Nothing outstanding in this view.") }
+                        val visibleGroups = if (!peopleView) groups else groups.mapValues { (_, rows) -> rows.filter { row -> data.shares.none { it.expenseId == row.id } } }.filterValues { it.isNotEmpty() }
+                        if (peopleView && visibleGroups.isNotEmpty() && data.shares.isNotEmpty()) item { Text("Unassigned to people", style = MaterialTheme.typography.titleMedium) }
+                        items(visibleGroups.keys.toList(), key = { it }) { key ->
+                            val records = visibleGroups.getValue(key)
                             Column(Modifier.fillMaxWidth().clickable { group = key }.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(records.first().groupLabel?.takeIf { it.isNotBlank() } ?: "Unlabelled", style = MaterialTheme.typography.titleMedium)
                                 Text("${records.size} expense${if (records.size == 1) "" else "s"} · ${friendly(records.first().ownership)}",
@@ -100,6 +127,26 @@ fun RepaymentsScreen(repository: TransactionRepository, month: LocalDate, onBack
                                 Text(money(records.fold(BigInteger.ZERO) { n, row -> n + BigInteger.valueOf(RepaymentAccounting.owed(row)) }),
                                     style = MaterialTheme.typography.titleMedium)
                                 HorizontalDivider(Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
+                            }
+                        }
+                    } else if (personId != null) {
+                        val name = data.members.firstOrNull { it.id == personId }?.name ?: "Local person"
+                        val shares = byPerson[personId].orEmpty()
+                        item {
+                            Text(name, style = MaterialTheme.typography.titleLarge)
+                            Text(if (monthOnly) "Shares from $monthName payments" else "Shares across all dates", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (shares.isEmpty()) item { Text("Nothing remains in this view. Repayment history is kept in each expense.") }
+                        items(shares, key = { it.id }) { share ->
+                            val row = data.expenses.first { it.id == share.expenseId }
+                            val owed = GroupSplitAccounting.owed(share, data.repayments)
+                            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(row.counterpartyLabel ?: "Expense", style = MaterialTheme.typography.titleMedium)
+                                Text("${row.groupLabel.orEmpty()} · ${transactionTime(row.effectiveTimestamp)}", style = MaterialTheme.typography.bodySmall)
+                                Text("Share ${money(share.amountMinor)} · Still owed ${money(owed)}", style = MaterialTheme.typography.bodyMedium)
+                                if (owed > 0) Button(onClick = { recordingId = row.id; recordingMemberId = share.memberId }) { Text("Record money received") }
+                                TextButton(onClick = { onExpense(row.id) }) { Text("Expense & repayment history") }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
                             }
                         }
                     } else {
@@ -115,14 +162,14 @@ fun RepaymentsScreen(repository: TransactionRepository, month: LocalDate, onBack
                                 Text("Still owed ${money(RepaymentAccounting.owed(row))}")
                                 Text("Paid ${money(row.amountMinor)} · Your share ${money(RepaymentAccounting.personal(row))}", style = MaterialTheme.typography.bodySmall)
                                 Text(transactionTime(row.effectiveTimestamp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                if (RepaymentAccounting.owed(row) > 0) Button(onClick = { recordingId = row.id }) { Text("Record money received") }
+                                if (RepaymentAccounting.owed(row) > 0) Button(onClick = { recordingId = row.id; recordingMemberId = null }) { Text("Record money received") }
                                 HorizontalDivider(Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
                             }
                         }
                     }
                 }
                 data.expenses.firstOrNull { it.id == recordingId }?.let { expense ->
-                    RepaymentEditor(repository, expense, null, onDismiss = { recordingId = null })
+                    RepaymentEditor(repository, expense, null, onDismiss = { recordingId = null; recordingMemberId = null }, initialMemberId = recordingMemberId)
                 }
             }
         }

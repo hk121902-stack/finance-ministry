@@ -6,7 +6,7 @@ An Android expense tracker that records transactions from incoming SMS and lets 
 
 **Status: early alpha.** The release channel is for installable **debug APKs** for testing. The app is being developed by one maintainer and is not ready for general use. Parsing can miss or misclassify transactions; check your records. Do not make this your only financial record.
 
-The release candidate in this repository is **v0.1.0-alpha.19**. The latest published
+The release candidate in this repository is **v0.1.0-alpha.20**. The latest published
 debug alpha remains available from [GitHub Releases](https://github.com/hk121902-stack/finance-ministry/releases).
 Download the debug APK from its assets. The release includes its SHA-256 checksum,
 signing-certificate details, and license notices. Physical-device testing is pending.
@@ -44,11 +44,6 @@ signing-certificate details, and license notices. Physical-device testing is pen
   payment without adding money-in twice, or choose **Received cash**. Save stays
   outside the scrolling form and previews the amount still owed. Transaction
   details retain edit/unlink history; **Month breakdown** exposes the monthly metrics.
-  Open **Still owed → Money owed to you**, choose a person/group, and tap
-  **Record money received** beside the expense. Search and link a recorded incoming
-  payment without adding money-in twice, or choose **Received cash**. Save stays
-  outside the scrolling form and previews the amount still owed. Transaction
-  details retain edit/unlink history; **Month breakdown** exposes the monthly metrics.
 - Review possible duplicate records and own-account transfers as suggestions, with
   both original records retained and decisions reversible.
 - Use spending breakdowns, remembered category rules, selected-row batch cleanup,
@@ -63,6 +58,28 @@ signing-certificate details, and license notices. Physical-device testing is pen
 - Store the ledger in an encrypted Room/SQLCipher database with keys protected by Android Keystore.
 
 The app has no account, cloud sync, ads, analytics, payment initiation, bank API connection, or Internet permission. It supports new incoming SMS and optional history import without becoming the default SMS app.
+
+### Individual group splits (alpha.20 release candidate)
+
+For a repayable **Group** expense, choose **Split with people**. Add reusable local
+nicknames and choose Equal or Custom. You are included: ₹900 split between You,
+Alice and Bob gives each a ₹300 share. Custom amounts must add up exactly; equal
+splits distribute leftover paise starting with You, then the displayed people.
+In a transaction form, Apply split updates the draft; Save transaction records it.
+
+**Money owed to you → By person** shows individual balances and expense drilldowns.
+Record a partial/full settlement against a person using cash or an existing incoming
+payment. An incoming payment is not counted twice; no one can repay more than their
+unpaid share. Unlink keeps the incoming record. Shares with settlements must be
+unlinked before changing the split. Existing unnamed balances are preserved, not
+guessed from payer text; unlink and explicitly relink old repayments to assign people.
+
+Nicknames, shares and receipts are included in password-encrypted backups; schema-7
+backups remain readable. CSV schema 3 adds individual shares, repayments and unpaid
+amounts (unencrypted, including nicknames). No contacts access, invitations or sync.
+New backups require alpha.20 or later; do not downgrade an updated installation.
+Check GitHub Releases for the latest published APK; a release candidate is not a
+published download until its pre-release is available there.
 
 ### Import existing SMS
 

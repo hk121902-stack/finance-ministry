@@ -45,8 +45,9 @@ data class TransactionEntity(
 /** An allocation, not a second receipt. Legacy entries deliberately have no invented date. */
 @Entity(tableName = "repayments", foreignKeys = [
     ForeignKey(entity = TransactionEntity::class, parentColumns = ["id"], childColumns = ["expenseId"], onDelete = ForeignKey.RESTRICT),
-    ForeignKey(entity = TransactionEntity::class, parentColumns = ["id"], childColumns = ["incomingId"], onDelete = ForeignKey.RESTRICT)
-], indices = [Index("expenseId"), Index("incomingId")])
+    ForeignKey(entity = TransactionEntity::class, parentColumns = ["id"], childColumns = ["incomingId"], onDelete = ForeignKey.RESTRICT),
+    ForeignKey(entity = LocalMemberEntity::class, parentColumns = ["id"], childColumns = ["memberId"], onDelete = ForeignKey.RESTRICT)
+], indices = [Index("expenseId"), Index("incomingId"), Index("memberId")])
 data class RepaymentEntity(
     @PrimaryKey val id: String,
     val expenseId: String,
@@ -56,7 +57,17 @@ data class RepaymentEntity(
     val payer: String,
     val method: String,
     val createdAt: Long,
+    val memberId: String? = null,
 )
+
+@Entity(tableName = "local_members")
+data class LocalMemberEntity(@PrimaryKey val id: String, val name: String, val createdAt: Long)
+
+@Entity(tableName = "group_shares", foreignKeys = [
+    ForeignKey(entity = TransactionEntity::class, parentColumns = ["id"], childColumns = ["expenseId"], onDelete = ForeignKey.CASCADE),
+    ForeignKey(entity = LocalMemberEntity::class, parentColumns = ["id"], childColumns = ["memberId"], onDelete = ForeignKey.RESTRICT)
+], indices = [Index("expenseId"), Index("memberId"), Index(value = ["expenseId", "memberId"], unique = true)])
+data class GroupShareEntity(@PrimaryKey val id: String, val expenseId: String, val memberId: String, val amountMinor: Long)
 
 @Entity(tableName = "ledger_metadata")
 data class LedgerMetadataEntity(@PrimaryKey val key: String, val value: String)
@@ -106,6 +117,14 @@ data class TransactionResultTotals(val count: Long, val debit: Long, val credit:
 
 @Dao
 interface TransactionDao {
+    @Query("SELECT * FROM local_members ORDER BY name COLLATE NOCASE, id") fun members(): List<LocalMemberEntity>
+    @Query("SELECT * FROM local_members WHERE id = :id") fun member(id: String): LocalMemberEntity?
+    @Insert fun addMember(row: LocalMemberEntity)
+    @Update fun updateMember(row: LocalMemberEntity)
+    @Query("SELECT * FROM group_shares ORDER BY id") fun groupShares(): List<GroupShareEntity>
+    @Query("SELECT * FROM group_shares WHERE expenseId = :id ORDER BY id") fun sharesFor(id: String): List<GroupShareEntity>
+    @Query("DELETE FROM group_shares WHERE expenseId = :id") fun deleteShares(id: String)
+    @Insert fun addShares(rows: List<GroupShareEntity>)
     @Query("SELECT * FROM budgets ORDER BY category, id") fun budgets(): List<BudgetEntity>
     @Query("SELECT * FROM budgets WHERE id = :id") fun budget(id: String): BudgetEntity?
     @Insert(onConflict = OnConflictStrategy.ABORT) fun addBudget(row: BudgetEntity)
@@ -170,7 +189,7 @@ interface TransactionDao {
     @Query("UPDATE payment_sources SET active = 0 WHERE id = :id") fun retireSource(id: String)
 }
 
-@Database(entities = [TransactionEntity::class, CorrectionEntity::class, ImportBatchEntity::class, PaymentSourceEntity::class, RepaymentEntity::class, CategoryRuleEntity::class, LedgerMetadataEntity::class, MatchDecisionEntity::class, BudgetEntity::class, RecurringReminderEntity::class], version = 7, exportSchema = true)
+@Database(entities = [TransactionEntity::class, CorrectionEntity::class, ImportBatchEntity::class, PaymentSourceEntity::class, RepaymentEntity::class, CategoryRuleEntity::class, LedgerMetadataEntity::class, MatchDecisionEntity::class, BudgetEntity::class, RecurringReminderEntity::class, LocalMemberEntity::class, GroupShareEntity::class], version = 8, exportSchema = true)
 abstract class FinanceDatabase : RoomDatabase() {
     abstract fun transactions(): TransactionDao
     private var connectionPassword: ByteArray? = null
@@ -181,6 +200,17 @@ abstract class FinanceDatabase : RoomDatabase() {
     }
 
     companion object {
+        val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS local_members (id TEXT NOT NULL, name TEXT NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(id))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS group_shares (id TEXT NOT NULL, expenseId TEXT NOT NULL, memberId TEXT NOT NULL, amountMinor INTEGER NOT NULL, PRIMARY KEY(id), FOREIGN KEY(expenseId) REFERENCES transactions(id) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY(memberId) REFERENCES local_members(id) ON UPDATE NO ACTION ON DELETE RESTRICT)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_group_shares_expenseId ON group_shares(expenseId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_group_shares_memberId ON group_shares(memberId)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_group_shares_expenseId_memberId ON group_shares(expenseId, memberId)")
+                db.execSQL("ALTER TABLE repayments ADD COLUMN memberId TEXT REFERENCES local_members(id) ON UPDATE NO ACTION ON DELETE RESTRICT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_repayments_memberId ON repayments(memberId)")
+            }
+        }
         val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS budgets (id TEXT NOT NULL, category TEXT NOT NULL, monthlyLimitMinor INTEGER NOT NULL, alertPercent INTEGER, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(id))")
@@ -241,7 +271,7 @@ abstract class FinanceDatabase : RoomDatabase() {
                 System.loadLibrary("sqlcipher")
                 Logger.setTarget(NoopTarget())
                 db = Room.databaseBuilder(context, FinanceDatabase::class.java, name)
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .openHelperFactory(SupportOpenHelperFactory(connectionPassword)).build()
                 db.connectionPassword = connectionPassword
                 db.openHelper.writableDatabase

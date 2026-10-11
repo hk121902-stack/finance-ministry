@@ -47,6 +47,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     var personalShare by rememberSaveable(existing?.id) { mutableStateOf(existing?.personalShareMinor?.let { BigDecimal.valueOf(it, 2).toPlainString() } ?: "") }
     var repaid by rememberSaveable(existing?.id) { mutableStateOf(existing?.repaidMinor?.takeIf { it > 0 }?.let { BigDecimal.valueOf(it, 2).toPlainString() } ?: "") }
     var repaymentExpected by rememberSaveable(existing?.id) { mutableStateOf(existing?.repaymentExpected ?: true) }
+    val splitDraft = rememberGroupSplitFormDraft(repository, existing)
     var rememberCategory by rememberSaveable(existing?.id) { mutableStateOf(false) }
     var rememberForSource by rememberSaveable(existing?.id) { mutableStateOf(false) }
     var sourceId by rememberSaveable(existing?.id) { mutableStateOf(existing?.paymentSourceId) }
@@ -64,7 +65,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
     val context = androidx.compose.ui.platform.LocalContext.current
     val maxSheetHeight = (LocalConfiguration.current.screenHeightDp * 0.86f).dp
     val initialFields = rememberSaveable(existing?.id) { listOf(amount, direction, status, type, channel, date, label, notes, hint, category, ownership, groupLabel, personalShare, repaid, sourceId, repaymentExpected.toString()) }
-    val dirty = rememberCategory || initialFields != listOf(amount, direction, status, type, channel, date, label, notes, hint, category, ownership, groupLabel, personalShare, repaid, sourceId, repaymentExpected.toString())
+    val dirty = rememberCategory || splitDraft.dirty || initialFields != listOf(amount, direction, status, type, channel, date, label, notes, hint, category, ownership, groupLabel, personalShare, repaid, sourceId, repaymentExpected.toString())
     SideEffect { onDirtyChange(dirty) }
     LaunchedEffect(revision) { availableCategories = repository.categories() }
     val pickerTheme = if (androidx.compose.foundation.isSystemInDarkTheme()) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert
@@ -123,6 +124,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
             (if (type == "CardRepayment") listOf("Personal", "Family") else listOf("Personal", "Family", "ForOther", "Group", "SelfTransfer")).forEach { option ->
                 FilterChip(selected = ownership == option, onClick = {
                     ownership = option
+                    if (existing == null && option != "Group") splitDraft.encoded = null
                     type = if (option == "SelfTransfer") "SelfTransfer" else if (type == "SelfTransfer") "Other" else type
                     if (option !in listOf("ForOther", "Group")) repaid = ""
                     if (option !in listOf("Group", "ForOther")) groupLabel = ""
@@ -172,7 +174,10 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
                 supportingText = { Text("A local label only. No contacts are accessed or invited.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         }
         if (ownership == "Group" && repaymentExpected) {
-            OutlinedTextField(personalShare, { personalShare = it }, label = { Text("Your share (INR)") }, supportingText = { Text("The rest is tracked as money others owe you.") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+            if (direction == "Debit") GroupSplitFormFields(repository, splitDraft, amount, personalShare, !busy,
+                onPersonalShare = { personalShare = it }, onError = { error = it })
+            else OutlinedTextField(personalShare, { personalShare = it }, label = { Text("Your share (INR)") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
         }
         if (direction == "Debit" && repaymentExpected && ownership in listOf("ForOther", "Group")) {
             Text(if (existing == null) "Save this expense, then record dated repayments from its details."
@@ -213,16 +218,18 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
         }
       }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        splitDraft.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         HorizontalDivider()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = {
-                if (!busy && sourcesReady) {
+                if (!busy && sourcesReady && splitDraft.ready) {
                     if (compact && existing != null) {
                         busy = true
                         scope.launch {
                             try {
                                 repository.classify(existing.id, category, SpendingOwnership.valueOf(ownership), groupLabel, personalShare, repaid, repaymentExpected,
-                                    if (rememberCategory) RememberCategoryRule(label, sourceId.takeIf { rememberForSource }) else null)
+                                    if (rememberCategory) RememberCategoryRule(label, sourceId.takeIf { rememberForSource }) else null,
+                                    groupShares = splitDraft.shares)
                                 onDone()
                             } catch (e: IllegalArgumentException) { error = e.message ?: "Check the fields." }
                             catch (_: Exception) { error = "Could not save. Check that the record still exists and retry." }
@@ -236,7 +243,8 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
                         val chosenType = transactionTypeForSave(type, direction, channel, sources.any { it.id == sourceId && it.kind == "Credit card" })
                         ManualInput(amount, Direction.valueOf(direction), timestamp,
                             chosenType, TransactionStatus.valueOf(status), Channel.valueOf(channel), label, notes, hint,
-                            category, SpendingOwnership.valueOf(ownership), groupLabel, personalShare, repaid, sourceId, repaymentExpected).also { it.validate() }
+                            category, SpendingOwnership.valueOf(ownership), groupLabel, personalShare, repaid, sourceId, repaymentExpected,
+                            groupShares = splitDraft.shares).also { it.validate() }
                     } catch (e: IllegalArgumentException) { error = e.message ?: "Check the fields."; null }
                     catch (_: java.time.DateTimeException) { error = "Enter a valid date and time as yyyy-MM-dd HH:mm."; null }
                     if (input != null) { busy = true; scope.launch {
@@ -247,7 +255,7 @@ fun TransactionForm(repository: TransactionRepository, existing: TransactionEnti
                         finally { busy = false }
                     } }
                 }
-            }, enabled = !busy && sourcesReady, modifier = Modifier.weight(1f)) { Text(if (busy) "Saving…" else "Save transaction") }
+            }, enabled = !busy && sourcesReady && splitDraft.ready, modifier = Modifier.weight(1f)) { Text(if (busy) "Saving…" else "Save transaction") }
             OutlinedButton(onClick = leave, enabled = !busy) { Text("Cancel") }
         }
     }

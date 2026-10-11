@@ -72,6 +72,9 @@ class MatchingUiTest {
         try {
             rule.onNodeWithContentDescription("Open review tab").performClick()
             rule.onNodeWithText("Possible matches").performClick()
+            rule.waitUntil(15000) {
+                rule.onAllNodesWithTag("compare-${TransactionMatching.pairKey(a, b)}").fetchSemanticsNodes().isNotEmpty()
+            }
             rule.onNodeWithTag("compare-${TransactionMatching.pairKey(a, b)}").performScrollTo().performClick()
             rule.onNodeWithText("Did this money move between your own accounts?").assertExists()
             capture("match-transfer.png")

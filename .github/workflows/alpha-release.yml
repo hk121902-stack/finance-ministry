@@ -101,7 +101,7 @@ jobs:
           printf '%s\n' "Debug alpha $VERSION for testing; not ready for general use." '' \
             'Download the APK asset. See README for setup and permission instructions.' '' \
             "$changes" '' \
-            'Existing records are not silently reclassified. Review old errors individually. Backups with custom categories require alpha.15 or later; CSV schema 2 is an unencrypted report, not a restore backup.' '' \
+            'Existing records are not silently reclassified or assigned to people. Review old errors individually. Backups created by this release require alpha.20 or later; older schema-7 backups remain readable. CSV schema 3 includes local participant names and is an unencrypted report, not a restore backup. Do not downgrade an updated installation.' '' \
             'Keep any backup password safe; the app cannot recover it. This is an independent app, not a government service or bank.' '' \
             'Install over a previous official alpha to update. Back up an important ledger before updating or replacing data.' '' \
             'JVM tests, lint and assembly passed in this signed release run. The prerequisite Android 16 debug instrumentation and synthetic SMS gates passed. Signed artifact upgrade/recovery and physical-device verification remain separate requirements; consult version-specific reports before wider distribution.' '' \

@@ -27,6 +27,7 @@ import java.time.ZoneId
 fun RepaymentHistoryPanel(repository: TransactionRepository, expense: TransactionEntity, eligible: Boolean) {
     val revision by repository.revision.collectAsState()
     var history by remember(expense.id) { mutableStateOf<List<RepaymentEntity>>(emptyList()) }
+    var memberNames by remember(expense.id) { mutableStateOf<Map<String, String>>(emptyMap()) }
     var add by rememberSaveable(expense.id) { mutableStateOf(false) }
     var editId by rememberSaveable(expense.id) { mutableStateOf<String?>(null) }
     var unlinkId by rememberSaveable(expense.id) { mutableStateOf<String?>(null) }
@@ -34,11 +35,12 @@ fun RepaymentHistoryPanel(repository: TransactionRepository, expense: Transactio
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(expense.id, revision) {
-        try { history = repository.repaymentsFor(expense.id); error = null }
+        try { history = repository.repaymentsFor(expense.id); memberNames = repository.localMembers().associate { it.id to it.name }; error = null }
         catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (_: Exception) { error = "Could not load repayment history." }
     }
     if (expense.direction != "Debit") return
+    if (expense.ownership == "Group" && expense.repaymentExpected) GroupSharesPanel(repository, expense, eligible)
     if (expense.repaymentExpected && expense.ownership in listOf("ForOther", "Group") || history.isNotEmpty()) {
         HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
         Text("Repayment history", style = MaterialTheme.typography.titleMedium)
@@ -52,7 +54,7 @@ fun RepaymentHistoryPanel(repository: TransactionRepository, expense: Transactio
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(money(entry.amountMinor), style = MaterialTheme.typography.titleSmall)
                 Text(entry.receivedAt?.let(::transactionTime) ?: "Date unknown · legacy repayment", style = MaterialTheme.typography.bodySmall)
-                Text("${entry.payer.ifBlank { "No name" }} · ${if (entry.method == "Legacy") "Previously recorded" else if (entry.method == "Cash") "Cash receipt" else "Linked incoming payment"}", style = MaterialTheme.typography.bodySmall)
+                Text("${memberNames[entry.memberId] ?: entry.payer.ifBlank { "No name" }} · ${if (entry.method == "Legacy") "Previously recorded" else if (entry.method == "Cash") "Cash receipt" else "Linked incoming payment"}", style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { editId = entry.id }, enabled = !busy && eligible) { Text("Edit repayment") }
                     TextButton(onClick = { unlinkId = entry.id }, enabled = !busy) { Text("Unlink") }
@@ -85,7 +87,8 @@ fun RepaymentHistoryPanel(repository: TransactionRepository, expense: Transactio
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-internal fun RepaymentEditor(repository: TransactionRepository, expense: TransactionEntity, existing: RepaymentEntity?, onDismiss: () -> Unit) {
+internal fun RepaymentEditor(repository: TransactionRepository, expense: TransactionEntity, existing: RepaymentEntity?, onDismiss: () -> Unit,
+    initialMemberId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var amount by rememberSaveable(existing?.id) { mutableStateOf(existing?.amountMinor?.let { BigDecimal.valueOf(it, 2).toPlainString() } ?: "") }
@@ -100,22 +103,45 @@ internal fun RepaymentEditor(repository: TransactionRepository, expense: Transac
     var busy by remember { mutableStateOf(false) }
     var discard by remember { mutableStateOf(false) }
     var choosingPayment by rememberSaveable(existing?.id) { mutableStateOf(false) }
+    var memberId by rememberSaveable(expense.id, existing?.id) { mutableStateOf(existing?.memberId ?: initialMemberId) }
+    var shares by remember { mutableStateOf<List<GroupShareEntity>>(emptyList()) }
+    var members by remember { mutableStateOf<List<LocalMemberEntity>>(emptyList()) }
+    var repayments by remember { mutableStateOf<List<RepaymentEntity>>(emptyList()) }
     var search by rememberSaveable(existing?.id) { mutableStateOf("") }
     val focus = LocalFocusManager.current
-    val initialAmount = existing?.amountMinor?.let { BigDecimal.valueOf(it, 2).toPlainString() }.orEmpty()
+    var initialAmount by rememberSaveable(expense.id, existing?.id) { mutableStateOf(amount) }
+    var initialPayer by rememberSaveable(expense.id, existing?.id) { mutableStateOf(payer) }
+    var initialized by rememberSaveable(expense.id, existing?.id) { mutableStateOf(false) }
     val initialDate = rememberSaveable(existing?.id) { date }
-    val dirty = amount != initialAmount || payer != (existing?.payer ?: expense.groupLabel.orEmpty()) ||
+    val dirty = amount != initialAmount || payer != initialPayer ||
         incomingId != existing?.incomingId || method != (existing?.method ?: "Linked") ||
-        dateKnown != (existing == null || existing.receivedAt != null) || dateKnown && date != initialDate
+        dateKnown != (existing == null || existing.receivedAt != null) || dateKnown && date != initialDate || memberId != (existing?.memberId ?: initialMemberId)
     val close = { if (!busy) { if (dirty) discard = true else onDismiss() }; Unit }
     LaunchedEffect(expense.id) {
-        try { credits = repository.availableRepaymentCredits(); loaded = true }
+        try {
+            credits = repository.availableRepaymentCredits()
+            shares = repository.groupSharesFor(expense.id); members = repository.localMembers(); repayments = repository.repaymentsFor(expense.id)
+            if (!initialized) {
+                if (memberId != null) {
+                    payer = members.firstOrNull { it.id == memberId }?.name ?: payer
+                    if (existing == null && amount.isBlank()) shares.firstOrNull { it.memberId == memberId }?.let {
+                        amount = shareDecimal(GroupSplitAccounting.owed(it, repayments))
+                    }
+                }
+                initialAmount = amount; initialPayer = payer; initialized = true
+            }
+            loaded = true
+        }
         catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (_: Exception) { error = "Could not load incoming payments. Close and retry." }
     }
     val pickerTheme = if (androidx.compose.foundation.isSystemInDarkTheme()) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert
     val leavePicker = { focus.clearFocus(); choosingPayment = false; search = "" }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val personName = members.firstOrNull { it.id == memberId }?.name
+    val remainingForPerson = shares.firstOrNull { it.memberId == memberId }?.let { share ->
+        GroupSplitAccounting.owed(share, repayments.filter { it.id != existing?.id })
+    }
     ModalBottomSheet(onDismissRequest = {
         // Material hides before this callback. Restore it when navigating within the
         // editor, or while a save/discard decision still owns the draft.
@@ -126,7 +152,7 @@ internal fun RepaymentEditor(repository: TransactionRepository, expense: Transac
             close()
             if (busy || dirty) scope.launch { sheetState.show() }
         }
-    }, sheetState = sheetState,
+    }, sheetState = sheetState, sheetGesturesEnabled = false, dragHandle = null,
         modifier = Modifier.imePadding()) {
       Column(Modifier.fillMaxWidth().fillMaxHeight(.9f)) {
         if (choosingPayment) {
@@ -157,12 +183,25 @@ internal fun RepaymentEditor(repository: TransactionRepository, expense: Transac
             Text(if (existing == null) "Record money received" else "Edit repayment", style = MaterialTheme.typography.titleLarge)
             Text("${expense.counterpartyLabel ?: "Expense"}${expense.groupLabel?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()}", style = MaterialTheme.typography.bodyMedium)
             Text("Still owed ${money(RepaymentAccounting.owed(expense))}", style = MaterialTheme.typography.titleMedium)
+            if (shares.isNotEmpty()) {
+                if (personName != null) Text("$personName · ${money(remainingForPerson)} available to settle", style = MaterialTheme.typography.titleMedium)
+                if (existing == null) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    shares.filter { GroupSplitAccounting.owed(it, repayments) > 0 }.forEach { share ->
+                        val name = members.firstOrNull { it.id == share.memberId }?.name ?: "Local person"
+                        FilterChip(memberId == share.memberId, {
+                            memberId = share.memberId; payer = name
+                            amount = shareDecimal(GroupSplitAccounting.owed(share, repayments)); error = null
+                        }, label = { Text(name) }, enabled = !busy)
+                    }
+                }
+                if (memberId == null) Text("Choose whose unpaid share this settles.", style = MaterialTheme.typography.bodySmall)
+            }
             if (existing == null) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = method == "Linked", onClick = { choosingPayment = true; focus.clearFocus() }, label = { Text("Choose a recorded payment") }, enabled = !busy)
                 FilterChip(selected = method == "Cash", onClick = { method = "Cash"; incomingId = null; error = null }, label = { Text("Received cash") }, enabled = !busy)
             }
             OutlinedTextField(amount, { amount = it; error = null }, label = { Text("Repayment amount (INR)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !busy)
-            OutlinedTextField(payer, { payer = it.take(40) }, label = { Text("Who paid you? (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !busy)
+            if (shares.isEmpty()) OutlinedTextField(payer, { payer = it.take(40) }, label = { Text("Who paid you? (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !busy)
             if (existing == null) {
                 if (method == "Linked") {
                     val selected = credits.firstOrNull { it.first.id == incomingId }
@@ -194,19 +233,19 @@ internal fun RepaymentEditor(repository: TransactionRepository, expense: Transac
           Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val remaining = try {
                 val minor = ManualInput(amount, `in`.financeministry.app.core.model.Direction.Credit, date, `in`.financeministry.app.core.model.TransactionType.Other).amountMinor()
-                val available = Math.addExact(RepaymentAccounting.owed(expense), existing?.amountMinor ?: 0)
+                val available = remainingForPerson ?: Math.addExact(RepaymentAccounting.owed(expense), existing?.amountMinor ?: 0)
                 (available - minor).takeIf { minor <= available }
             } catch (_: IllegalArgumentException) { null } catch (_: ArithmeticException) { null }
-            remaining?.let { Text("Still owed after saving: ${money(it)}", style = MaterialTheme.typography.bodySmall) }
+            remaining?.let { Text("${personName?.let { name -> "$name · " }.orEmpty()}Still owed after saving: ${money(it)}", style = MaterialTheme.typography.bodySmall) }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(enabled = !busy && (existing != null || method == "Cash" || incomingId != null), modifier = Modifier.weight(1f), onClick = {
+            Button(enabled = loaded && !busy && (shares.isEmpty() || memberId != null) && (existing != null || method == "Cash" || incomingId != null), modifier = Modifier.weight(1f), onClick = {
                 if (busy || existing == null && method != "Cash" && incomingId == null) return@Button
                 busy = true
                 scope.launch {
                     try {
                         if (existing != null) repository.editRepayment(existing.id, amount, date.takeIf { dateKnown }, payer)
-                        else repository.recordRepayment(expense.id, amount, date, payer, incomingId.takeIf { method == "Linked" })
+                        else repository.recordRepayment(expense.id, amount, date, payer, incomingId.takeIf { method == "Linked" }, memberId)
                         onDismiss()
                     } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
                     catch (e: IllegalArgumentException) { error = e.message ?: "Check the repayment details." }

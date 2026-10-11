@@ -271,8 +271,7 @@ class LedgerUxTest {
             repository.preferences.edit().putBoolean("sms_disclosure", true).commit()
             assertTrue(runBlocking { repository.ingest(`in`.financeministry.app.core.model.IncomingSms("SYNTHETIC", System.currentTimeMillis(), "Your account was debited via UPI.")) })
             rule.waitForIdle()
-            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Open review queue"))
-            rule.onNodeWithContentDescription("Open review queue").performClick()
+            rule.onNodeWithContentDescription("Open review tab").assertIsDisplayed().performClick()
             val target = hasText("Amount unknown") and hasText("Money out")
             try {
                 rule.onNode(hasScrollToNodeAction()).performScrollToNode(target)

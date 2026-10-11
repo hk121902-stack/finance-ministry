@@ -35,7 +35,7 @@ suspend fun TransactionRepository.repaymentSummary(month: LocalDate): RepaymentS
     val start = month.withDayOfMonth(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     val end = month.withDayOfMonth(1).plusMonths(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     RepaymentAccounting.summary(db.transactions().repaymentCandidates(), db.transactions().repayments(), start, end,
-        db.transactions().reversedOriginals().toSet())
+        db.transactions().reversedOriginals().toSet()).copy(shares = db.transactions().groupShares(), members = db.transactions().members())
 }
 
 suspend fun TransactionRepository.repaymentsFor(id: String): List<RepaymentEntity> = withLedger { it.transactions().repaymentsFor(id) }
@@ -49,24 +49,26 @@ suspend fun TransactionRepository.availableRepaymentCredits(): List<Pair<Transac
 }
 
 suspend fun TransactionRepository.recordRepayment(expenseId: String, amount: String, receivedAt: Long, payer: String,
-    incomingId: String? = null): RepaymentEntity = withLedger { db ->
+    incomingId: String? = null, memberId: String? = null): RepaymentEntity = withLedger { db ->
     val minor = ManualInput(amount, Direction.Credit, receivedAt, TransactionType.Other, label = payer).also { it.validate() }.amountMinor()
     require(payer.length <= 40) { "Keep the name within 40 characters." }
     val dao = db.transactions()
     val expense = requireNotNull(dao.get(expenseId)) { "Expense no longer exists." }
+    val payerName = memberId?.let { requireNotNull(dao.member(it)) { "Person no longer exists." }.name } ?: payer.trim()
     val credit = incomingId?.let { requireNotNull(dao.get(it)) { "Incoming payment no longer exists." } }
     require(expense.id !in dao.reversedOriginals() && (credit == null || credit.id !in dao.reversedOriginals())) { "A reversed transaction cannot be allocated." }
     if (credit != null) require(receivedAt == credit.effectiveTimestamp) { "A linked repayment uses the incoming payment's actual date." }
     val allocated = credit?.let { dao.allocationsFrom(it.id).fold(0L) { total, r -> Math.addExact(total, r.amountMinor) } } ?: 0L
     RepaymentAccounting.validateAllocation(expense, credit, minor, allocated)
+    GroupSplitAccounting.validateRepayment(dao.sharesFor(expenseId), dao.repaymentsFor(expenseId), memberId, minor)
     val now = System.currentTimeMillis()
     val cashId = if (credit == null) UUID.randomUUID().toString() else null
     val repayment = RepaymentEntity(UUID.randomUUID().toString(), expenseId, credit?.id ?: cashId, minor,
-        receivedAt, payer.trim(), if (credit == null) "Cash" else "Linked", now)
+        receivedAt, payerName, if (credit == null) "Cash" else "Linked", now, memberId)
     db.runInTransaction {
         if (cashId != null) dao.insert(TransactionEntity(cashId, sourceType = "Manual", sourceTimestamp = receivedAt,
             effectiveTimestamp = receivedAt, amountMinor = minor, direction = "Credit", status = "Successful",
-            channel = "CashManual", transactionType = "Other", counterpartyLabel = payer.trim().ifBlank { "Cash repayment" },
+            channel = "CashManual", transactionType = "Other", counterpartyLabel = payerName.ifBlank { "Cash repayment" },
             reviewState = "Confirmed", createdAt = now, updatedAt = now))
         dao.addRepayment(repayment)
         updateRepaymentAggregate(dao, expense, now)
@@ -102,8 +104,10 @@ suspend fun TransactionRepository.editRepayment(id: String, amount: String, rece
     val otherAllocated = credit?.let { dao.allocationsFrom(it.id).filter { allocation -> allocation.id != id }
         .fold(0L) { n, allocation -> Math.addExact(n, allocation.amountMinor) } } ?: 0L
     RepaymentAccounting.validateAllocation(expense.copy(repaidMinor = expense.repaidMinor - old.amountMinor), credit, minor, otherAllocated)
+    GroupSplitAccounting.validateRepayment(dao.sharesFor(expense.id), dao.repaymentsFor(expense.id).filter { it.id != id }, old.memberId, minor)
     val now = System.currentTimeMillis()
-    val updated = old.copy(amountMinor = minor, receivedAt = receivedAt, payer = payer.trim())
+    val payerName = old.memberId?.let { requireNotNull(dao.member(it)) { "Person no longer exists." }.name } ?: payer.trim()
+    val updated = old.copy(amountMinor = minor, receivedAt = receivedAt, payer = payerName)
     db.runInTransaction {
         dao.updateRepayment(updated)
         updateRepaymentAggregate(dao, expense, now)

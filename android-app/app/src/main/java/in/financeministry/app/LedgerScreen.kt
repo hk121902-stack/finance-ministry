@@ -713,6 +713,9 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
     if (form && (selectedId == null || selected != null)) ModalBottomSheet(
         onDismissRequest = { if (!busy) { if (dirtyForm) formDismissWarning = true else { form = false; selected = null; selectedId = null } } },
         sheetState = formSheetState,
+        // Scrolling the form at its top must not drag/dismiss the editor window.
+        sheetGesturesEnabled = false,
+        dragHandle = null,
     ) {
         TransactionForm(repository, selected,
             onDone = { dirtyForm = false; quickForm = false; form = false; selected = null; selectedId = null; offset = 0; error = null },

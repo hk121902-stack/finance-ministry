@@ -343,6 +343,7 @@ class TransactionRepository(private val context: Context, private val namespace:
             groupLabel = input.groupLabel.trim().takeIf { input.normalizedOwnership() in setOf(SpendingOwnership.Group, SpendingOwnership.ForOther) && it.isNotBlank() }, personalShareMinor = input.personalShareMinor(),
             repaidMinor = input.repaidMinor(), paymentSourceId = input.paymentSourceId,
             repaymentExpected = input.repaymentExpected, duplicateOfId = old?.duplicateOfId, categoryNeedsReview = false)
+        validateGroupSplitEdit(dao, old, row, input.groupShares)
         if (old != null) validateRepaymentEdit(dao, old, row)
         val rule = rememberedRule?.let { buildRememberedRule(dao, row, it) }
         db().runInTransaction {
@@ -370,6 +371,7 @@ class TransactionRepository(private val context: Context, private val namespace:
                     CorrectionEntity(UUID.randomUUID().toString(), row.id, now, key, before[key], value) })
             }
             syncLegacyRepayment(dao, row)
+            replaceGroupShares(dao, row, input.groupShares, now)
             rule?.let(dao::saveRule)
         }
         revision.value++
@@ -379,7 +381,7 @@ class TransactionRepository(private val context: Context, private val namespace:
     /** Labels never confirm a payment or change its parsed financial fields. */
     suspend fun classify(id: String, category: String, ownership: SpendingOwnership,
         group: String = "", share: String = "", repaid: String = "", repaymentExpected: Boolean = true,
-        rememberedRule: RememberCategoryRule? = null) = locked {
+        rememberedRule: RememberCategoryRule? = null, groupShares: List<MemberShareInput>? = null) = locked {
         val dao = db().transactions()
         val old = requireNotNull(dao.get(id)) { "This transaction no longer exists." }
         require(categoryExists(dao, category.trim()) || old.category == category.trim()) { "Choose an available category." }
@@ -402,6 +404,7 @@ class TransactionRepository(private val context: Context, private val namespace:
             "groupLabel" to r.groupLabel, "personalShareMinor" to r.personalShareMinor?.toString(),
             "repaidMinor" to r.repaidMinor.toString(), "transactionType" to r.transactionType,
             "repaymentExpected" to r.repaymentExpected.toString())
+        validateGroupSplitEdit(dao, old, row, groupShares)
         validateRepaymentEdit(dao, old, row)
         val rule = rememberedRule?.let { buildRememberedRule(dao, row, it) }
         db().runInTransaction {
@@ -411,6 +414,7 @@ class TransactionRepository(private val context: Context, private val namespace:
             dao.audit(fields(row).filter { (key, value) -> before[key] != value }.map { (key, value) ->
                 CorrectionEntity(UUID.randomUUID().toString(), id, now, key, before[key], value) })
             syncLegacyRepayment(dao, row)
+            replaceGroupShares(dao, row, groupShares, now)
             rule?.let(dao::saveRule)
         }
         revision.value++

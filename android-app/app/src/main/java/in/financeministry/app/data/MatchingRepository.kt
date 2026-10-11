@@ -62,6 +62,7 @@ suspend fun TransactionRepository.matchSuggestions(): List<MatchSuggestion> = ma
 suspend fun TransactionRepository.matchDecisions(): List<MatchDecisionEntity> = withLedger { it.transactions().matchDecisions() }
 
 private fun requireNoAllocations(dao: TransactionDao, rows: List<TransactionEntity>) {
+    require(rows.all { dao.sharesFor(it.id).isEmpty() }) { "Remove individual group splits before resolving this financial match." }
     require(rows.all { dao.repaymentsFor(it.id).isEmpty() && dao.allocationsFrom(it.id).isEmpty() }) {
         "This pair has repayment links. Review and unlink those allocations before resolving the match. Incoming payments are kept."
     }

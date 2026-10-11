@@ -12,6 +12,7 @@ data class ManualInput(
     val groupLabel: String = "", val personalShare: String = "", val repaid: String = "",
     val paymentSourceId: String? = null,
     val repaymentExpected: Boolean = true,
+    val groupShares: List<MemberShareInput>? = null,
 ) {
     fun amountMinor(): Long {
         require(amount.matches(Regex("[0-9]{1,16}(\\.[0-9]{1,2})?"))) { "Enter a positive amount with up to two decimal places." }
@@ -42,6 +43,13 @@ data class ManualInput(
         require(share in 0..total) { "Your share must be between zero and the total amount." }
         require(ownership != SpendingOwnership.Group || groupLabel.trim().isNotBlank()) { "Name the group." }
         require(repaidMinor(total, share) in 0..(total - share)) { "Repaid amount cannot exceed the amount others owe." }
+        if (!groupShares.isNullOrEmpty()) {
+            require(direction == Direction.Debit && normalizedOwnership() == SpendingOwnership.Group && repaymentExpected &&
+                status == TransactionStatus.Successful && normalizedType() !in listOf(TransactionType.SelfTransfer, TransactionType.CardRepayment)) {
+                "Individual splits need a successful group expense with repayment expected."
+            }
+            GroupSplitAccounting.validate(total, share, groupShares)
+        }
     }
     fun normalizedType(): TransactionType = when {
         ownership == SpendingOwnership.SelfTransfer || type == TransactionType.SelfTransfer -> TransactionType.SelfTransfer

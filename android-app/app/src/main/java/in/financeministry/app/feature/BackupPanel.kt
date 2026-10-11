@@ -123,6 +123,7 @@ fun BackupPanel(repository: TransactionRepository, month: LocalDate, onBusyChang
                 Text("${ready.transactionCount} transactions · ${ready.repaymentCount} repayments")
                 Text("${ready.sourceCount} payment sources · ${ready.ruleCount} category rules", style = MaterialTheme.typography.bodySmall)
                 Text("${ready.budgetCount} budgets · ${ready.recurringReminderCount} payment reminders", style = MaterialTheme.typography.bodySmall)
+                Text("${ready.memberCount} local people · ${ready.groupShareCount} individual shares", style = MaterialTheme.typography.bodySmall)
                 if (hasData) {
                     Text("Protect your current ledger first. Replacement requires a completed backup of its current contents.", style = MaterialTheme.typography.bodySmall)
                     TextButton(enabled = !busy, onClick = { message = null; error = null; passwordAction = "backup" }) { Text("Back up current ledger") }
