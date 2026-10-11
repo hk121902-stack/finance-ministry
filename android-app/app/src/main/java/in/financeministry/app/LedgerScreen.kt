@@ -472,10 +472,19 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                 }
                 }
             } else {
+                // Lazy layout can evaluate its item provider during measurement. Capture every
+                // structural input together so its count and keys cannot see different revisions.
+                val listDestination = destination
+                val listSnapshot = snapshot
+                val listLoading = loading
+                val listGuide = showGuide
+                val listOffset = offset
+                val rows = if (listDestination == "Overview") listSnapshot?.rows.orEmpty().take(4)
+                    else listSnapshot?.rows.orEmpty()
                 LazyColumn(Modifier.fillMaxWidth().weight(1f), state = ledgerListState,
                     contentPadding = PaddingValues(bottom = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (destination == "Overview" && showGuide) item {
+                if (listDestination == "Overview" && listGuide) item {
                     `in`.financeministry.app.feature.FirstUseGuide(captureEnabled, paymentSources.any { it.active },
                         repository.preferences.getBoolean("review_reminder", false),
                         onDone = { finishGuide() },
@@ -486,7 +495,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         isUpdate = tourIsUpdate,
                         onChapterChanged = { scope.launch { ledgerListState.scrollToItem(0) } })
                 }
-                if (destination == "Overview") item {
+                if (listDestination == "Overview") item {
                     snapshot?.let {
                         Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -524,7 +533,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         } }
                     }
                 }
-                if (destination == "Overview") item {
+                if (listDestination == "Overview") item {
                     snapshot?.let {
                         Card(Modifier.fillMaxWidth().clickable { showRepayments = true }.semantics { contentDescription = "Open repayments" }, shape = MaterialTheme.shapes.large,
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -560,7 +569,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         }
                     }
                 }
-                if (destination == "Overview") item {
+                if (listDestination == "Overview") item {
                     TextButton(onClick = { showInsights = true },
                         modifier = Modifier.semantics { contentDescription = "Open spending breakdown" }) { Text("Breakdown") }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
@@ -569,7 +578,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         TextButton(onClick = { destination = "Transactions"; offset = 0; snapshot = null }) { Text("View all") }
                     }
                 }
-                if (destination == "Transactions") item {
+                if (listDestination == "Transactions") item {
                     if (showCategoryTip) Text("Open a transaction, then choose Category & purpose to save it or remember the merchant for future payments.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -614,7 +623,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         batchSelectedIds = ArrayList(snapshot?.rows.orEmpty().map { it.id })
                     }) { Text("Select visible records") }
                 }
-                if (destination == "Review") item {
+                if (listDestination == "Review") item {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(selected = true, onClick = {}, label = { Text("Needs details") })
                         FilterChip(selected = false, onClick = { matchHistory = false; showMatches = true }, label = { Text("Possible matches") })
@@ -626,8 +635,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         Text("$categoryConflictCount category choices needed · separate from financial review")
                     }
                 }
-                val rows = if (destination == "Overview") snapshot?.rows.orEmpty().take(4) else snapshot?.rows.orEmpty()
-                if (loading) item { Text("Loading transactions…") }
+                if (listLoading) item { Text("Loading transactions…") }
                 else if (rows.isEmpty()) item {
                     if (destination == "Transactions") Column(Modifier.fillMaxWidth().padding(vertical = 48.dp),
                         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
@@ -685,7 +693,7 @@ fun LedgerApp(repository: TransactionRepository, request: Pair<String, Boolean>?
                         }
                     }
                 }
-                if (destination != "Overview" && (offset > 0 || snapshot?.hasOlder == true)) item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (listDestination != "Overview" && (listOffset > 0 || listSnapshot?.hasOlder == true)) item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { offset = maxOf(0, offset - 100); snapshot = null }, enabled = !loading && offset > 0) { Text("Newer") }
                     Text("Page ${offset / 100 + 1}", Modifier.padding(top = 12.dp))
                     TextButton(onClick = { offset += 100; snapshot = null }, enabled = !loading && snapshot?.hasOlder == true && offset <= Int.MAX_VALUE - 201) { Text("Older") }

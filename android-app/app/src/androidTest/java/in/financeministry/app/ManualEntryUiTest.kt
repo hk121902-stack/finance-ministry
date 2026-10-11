@@ -40,6 +40,13 @@ class ManualEntryUiTest {
                 throw AssertionError("Save did not finish. UI state: ${rule.onRoot().printToString()}", failure)
             }
             rule.onNodeWithContentDescription("Add transaction").assertIsDisplayed()
+            // Overview deliberately shows only four recent records. Other test fixtures can
+            // be newer than this entry; verify the saved record in the complete ledger.
+            rule.onNodeWithContentDescription("Open transactions").performClick()
+            rule.waitUntil(15000) {
+                rule.onAllNodesWithText("Loading transactions…").fetchSemanticsNodes().isEmpty() &&
+                    rule.onAllNodesWithText("Results totals").fetchSemanticsNodes().isNotEmpty()
+            }
             val savedRow = hasText("₹512.34") and hasClickAction()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(savedRow)
             rule.onNode(savedRow).assertIsDisplayed()
