@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Finance Ministry — Privacy Policy</title>
+<meta name="description" content="How Finance Ministry handles SMS access, your on-device ledger, backups and support email.">
+<link rel="canonical" href="https://hk121902-stack.github.io/finance-ministry/privacy.html">
+<style>
+:root{color-scheme:light dark}*{box-sizing:border-box}body{margin:0;background:#faf9f6;color:#202329;font:16px/1.75 system-ui,sans-serif}main{max-width:780px;margin:auto;padding:48px 24px 64px}h1{font-size:2.4rem;line-height:1.15;letter-spacing:-.04em}h2{font-size:1.2rem;line-height:1.4;margin-top:2rem}a{color:#2848a9;overflow-wrap:anywhere}.meta,footer{color:#5d6470}footer{margin-top:40px;padding-top:20px;border-top:1px solid #dededc}@media(prefers-color-scheme:dark){body{background:#191c24;color:#f1f2f5}.meta,footer{color:#bfc4d0}a{color:#afc0ff}footer{border-color:#3b4150}}
+</style>
+</head>
+<body><main>
+<p class="meta">Finance Ministry · Updated 20 October 2026</p>
+<h1>Privacy policy</h1>
+<p>Finance Ministry is an independent personal expense tracker maintained by hk121902-stack. It is not a government service or bank. The app processes supported financial SMS on your Android device to create a local transaction ledger. There is no sign-up or app backend.</p>
+<h2>SMS access and other permissions</h2>
+<p>New-message capture uses optional RECEIVE_SMS access, requested after an in-app disclosure. Android delivers incoming messages broadly; the app filters them locally and rejects OTP/verification and non-transaction messages. The app does not request permission to send SMS, read contacts, access call logs, use a notification listener or connect to the Internet.</p>
+<p>Optional history import uses READ_SMS after a separate disclosure. The app queries the last three calendar months of your inbox and filters messages on your device. A preview holds normalized financial fields in memory until confirmation, cancellation or leaving Settings. Confirmation saves financial fields and import-batch metadata, never raw messages or senders. Import does not change your SMS or send individual import notifications. Undo removes untouched imported records and preserves your edits.</p>
+<p>Notification permission is separate. Disabling notifications does not disable otherwise authorized capture. Manual entry works without SMS or notification permissions. You can pause capture in Settings.</p>
+<h2>Information stored on your device</h2>
+<p>The encrypted ledger stores amounts, currency, direction, status, categories, purposes, dates, masked account hints, supported parsed recipient labels, source mappings, descriptions, correction history, parser metadata and local repayment/refund links. Device-keyed fingerprints detect repeat delivery and matching transaction references. Raw SMS bodies, sender strings and raw reference numbers are not stored or uploaded.</p>
+<p>Optional group expenses store participant nicknames, local IDs, exact shares, saved groups and individual settlement allocations. The app does not read contacts, invite participants or sync balances. Use nicknames rather than contact details. Labels and descriptions you type are stored locally; do not paste OTPs, full account numbers or private messages into them.</p>
+<h2>Security and retention</h2>
+<p>SQLCipher encrypts the ledger. Android Keystore protects local keys; the wrapped database password is held in private app preferences. The database and preferences are excluded from Android backup and device-transfer rules. Device manufacturers may implement backup behavior differently.</p>
+<p>Local records remain until you delete them, replace the ledger through restore, erase app data or uninstall. Deleting a transaction also removes its correction history. Erase all removes the database, keys and settings and pauses capture. It does not delete your SMS inbox or previously exported files. Uninstalling removes the local ledger. Database-key and restore errors preserve existing data rather than silently replacing it.</p>
+<h2>Backups and exports</h2>
+<p>The app has no advertising, analytics or developer-controlled data-upload service. You may create a password-encrypted backup or readable CSV report through Android's file picker. Backups include the ledger, supported settings, saved groups and repayment history. The backup password is not uploaded and cannot be recovered by the app.</p>
+<p>CSV is unencrypted and is not a restore backup. It can include participant nicknames, shares, received/unpaid amounts and financial classifications. Anyone with access to the file can read it. Your chosen storage provider may sync exported files under its own policies. Erase all and uninstall do not delete those copies.</p>
+<p>Restore validates and previews a backup before replacing the ledger. Restored capture and reminders remain paused until you explicitly reconfirm them.</p>
+<h2>Notifications and widgets</h2>
+<p>Notifications show normalized transaction details, not source SMS. Optional budget and recurring-payment reminders show configured names and amounts; they never initiate payments or automatically record transactions. Private lock-screen visibility is requested, but Android settings determine what is visible. Your Messages app can independently show the original SMS. The optional home-screen summary widget requires consent and hides its financial summary while locked.</p>
+<h2>Support email and third parties</h2>
+<p>Contact <a href="mailto:financeministrysupport@gmail.com">financeministrysupport@gmail.com</a> for privacy questions, bugs or feature requests. Settings → Help &amp; feedback opens your email app with the app version and a blank report template. You review and send the email yourself. No transactions, SMS, logs, backups or screenshots are automatically attached. A copy-address option is available if no email app can open.</p>
+<p>The maintainer receives the information you choose to email, and your email provider handles the message under its own policies. Remove private details from any screenshots or examples you add. Share synthetic examples rather than real messages, OTPs or account information.</p>
+<p>GitHub Pages hosts this privacy page. GitHub handles visits to this page, the project and downloads under its <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">privacy statement</a>. This website hosting does not give the app an Internet connection or upload your ledger. Report vulnerabilities through <a href="https://github.com/hk121902-stack/finance-ministry/security/advisories/new">private security reporting</a>. Do not post private data or exploit details in public issues.</p>
+<h2>Accuracy and distribution</h2>
+<p>Message parsing can miss or misclassify transactions. Review and correct your ledger and retain your bank records. Separately distributed debug alpha builds allow inspection through an authorized debugging connection. No security certification or regulatory approval is claimed.</p>
+<footer>Finance Ministry · Independent personal expense tracking<br><a href="mailto:financeministrysupport@gmail.com">financeministrysupport@gmail.com</a></footer>
+</main></body></html>
